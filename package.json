@@ -1,6 +1,6 @@
 {
   "name": "wa-deck",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "description": "WA Deck: multi-account WhatsApp manager",
   "main": "src/main.js",
   "scripts": {
@@ -40,6 +40,12 @@
     "mac": {
       "category": "public.app-category.social-networking",
       "icon": "assets/icon/icon.icns",
+      "extraResources": [
+        {
+          "from": "build/whisper/mac",
+          "to": "whisper"
+        }
+      ],
       "artifactName": "WA-Deck-${version}-${arch}.${ext}",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
@@ -68,6 +74,12 @@
     "win": {
       "icon": "assets/icon/icon.ico",
       "artifactName": "WA-Deck-${version}-${arch}.${ext}",
+      "extraResources": [
+        {
+          "from": "build/whisper/win",
+          "to": "whisper"
+        }
+      ],
       "target": [
         {
           "target": "nsis",

@@ -1,6 +1,9 @@
 node_modules
 dist
 .DS_Store
+# whisper-cli binaries land here in CI; dirs must exist for extraResources
+build/whisper/*/*
+!build/whisper/*/.gitkeep
 .claude/
 .superpowers/
 docs/superpowers/

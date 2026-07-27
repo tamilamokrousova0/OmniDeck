@@ -8,6 +8,7 @@ const { spawnSync, spawn } = require('child_process');
 const https = require('https');
 const { pathToFileURL } = require('url');
 const os = require('os');
+const { voiceHitTestScript, transcribeVoiceAt } = require('./voice-transcribe');
 
 /*
  * Keep WhatsApp/Telegram webviews online while hidden.
@@ -2153,12 +2154,32 @@ function setupWebviewGuards() {
       console.warn('[webview] did-fail-load (main):', errorCode, errorDescription, validatedURL);
     });
 
-    contents.on('context-menu', (_event, params) => {
+    contents.on('context-menu', async (_event, params) => {
       const template = [];
       const selectionText = String(params?.selectionText || '').trim();
       const linkURL = String(params?.linkURL || '').trim();
       const srcURL = String(params?.srcURL || '').trim();
       const mediaType = String(params?.mediaType || '').trim().toLowerCase();
+
+      /* Клик по голосовому? Hit-test асинхронный, поэтому меню строится
+         после него; 300ms-гонка не даёт зависшему webview заморозить меню. */
+      let voiceHit = null;
+      if (!params?.isEditable && !isTelegram()) {
+        voiceHit = await Promise.race([
+          contents.executeJavaScript(voiceHitTestScript(params.x, params.y)).catch(() => null),
+          new Promise((r) => setTimeout(() => r(null), 300)),
+        ]);
+      }
+      if (voiceHit?.ok) {
+        const parentWin = BrowserWindow.fromWebContents(contents.hostWebContents || contents) || mainWindow;
+        template.push(
+          {
+            label: 'Расшифровать голосовое',
+            click: () => { transcribeVoiceAt(contents, voiceHit.id, parentWin); },
+          },
+          { type: 'separator' },
+        );
+      }
 
       appendSpellcheckMenuItems(template, contents, params);
 
