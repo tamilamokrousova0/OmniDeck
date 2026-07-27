@@ -162,6 +162,11 @@ app.userAgentFallback = WA_USER_AGENT;
 
 const COLOR_PALETTE = ['#0ea5e9', '#22c55e', '#f97316', '#8b5cf6', '#14b8a6', '#ec4899', '#eab308', '#6366f1'];
 
+// Проверка орфографии: основные языки набора. На macOS список игнорируется —
+// там работает системный спеллчекер с автоопределением языка; на Windows
+// Chromium скачивает hunspell-словари для этих языков при первом запуске.
+const SPELLCHECK_LANGUAGES = ['ru', 'en-US'];
+
 const state = {
   paths: {
     userData: '',
@@ -1852,6 +1857,22 @@ function createWindow() {
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
+  // Орфография в полях самой деки (CRM, шаблоны, планировщик). Webview-поля
+  // обслуживает обработчик в setupWebviewGuards — сюда их события не доходят.
+  configureSpellchecker(mainWindow.webContents.session);
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    if (!params?.isEditable) return;
+    const template = [];
+    appendSpellcheckMenuItems(template, mainWindow.webContents, params);
+    template.push(
+      { role: 'cut', label: 'Вырезать' },
+      { role: 'copy', label: 'Копировать' },
+      { role: 'paste', label: 'Вставить' },
+      { role: 'selectAll', label: 'Выделить всё' },
+    );
+    Menu.buildFromTemplate(template).popup({ window: mainWindow });
+  });
+
   // Harden every <webview> the renderer attaches: strip any preload a
   // compromised renderer could inject, force isolation flags, and only allow
   // the two origins we actually host.
@@ -1864,6 +1885,7 @@ function createWindow() {
     // <webview> tag itself: no popups, no disabled web security, sandboxed.
     webPreferences.sandbox = true;
     webPreferences.webSecurity = true;
+    webPreferences.spellcheck = true;
     if (params && typeof params === 'object') {
       delete params.allowpopups;
       delete params.disablewebsecurity;
@@ -1969,6 +1991,48 @@ function createWindow() {
   }
 }
 
+function configureSpellchecker(ses) {
+  if (!ses) return;
+  try {
+    ses.setSpellCheckerEnabled(true);
+    if (process.platform !== 'darwin') {
+      ses.setSpellCheckerLanguages(SPELLCHECK_LANGUAGES);
+    }
+  } catch (err) {
+    console.warn('[spellcheck] configure failed:', err?.message || err);
+  }
+}
+
+/* Пункты орфографии для контекстного меню: варианты замены подчёркнутого
+   слова + «Добавить в словарь». Общие для webview и полей самой деки. */
+function appendSpellcheckMenuItems(template, contents, params) {
+  const misspelled = String(params?.misspelledWord || '');
+  if (!params?.isEditable || !misspelled) return;
+  const suggestions = Array.isArray(params.dictionarySuggestions)
+    ? params.dictionarySuggestions.slice(0, 5)
+    : [];
+  for (const suggestion of suggestions) {
+    template.push({
+      label: suggestion,
+      click: () => {
+        try { contents.replaceMisspelling(suggestion); } catch { /* ignore */ }
+      },
+    });
+  }
+  if (!suggestions.length) {
+    template.push({ label: 'Нет вариантов замены', enabled: false });
+  }
+  template.push(
+    {
+      label: 'Добавить в словарь',
+      click: () => {
+        try { contents.session.addWordToSpellCheckerDictionary(misspelled); } catch { /* ignore */ }
+      },
+    },
+    { type: 'separator' },
+  );
+}
+
 function setupWebviewGuards() {
   app.on('web-contents-created', (_event, contents) => {
     if (contents.getType() !== 'webview') return;
@@ -1977,6 +2041,7 @@ function setupWebviewGuards() {
     const ses = contents.session;
     if (ses && !_permissionConfiguredSessions.has(ses)) {
       _permissionConfiguredSessions.add(ses);
+      configureSpellchecker(ses);
       ses.setPermissionRequestHandler((_wc, permission, callback) => {
         callback(ALLOWED_WEBVIEW_PERMISSIONS.has(permission));
       });
@@ -2094,6 +2159,8 @@ function setupWebviewGuards() {
       const linkURL = String(params?.linkURL || '').trim();
       const srcURL = String(params?.srcURL || '').trim();
       const mediaType = String(params?.mediaType || '').trim().toLowerCase();
+
+      appendSpellcheckMenuItems(template, contents, params);
 
       if (selectionText) {
         template.push({ role: 'copy', label: 'Копировать' });
