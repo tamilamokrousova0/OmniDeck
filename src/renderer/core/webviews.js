@@ -21,6 +21,7 @@ import { bridgeScript } from '../webview-scripts/bridge.js';
 import { crmHoverBridgeScript } from '../webview-scripts/crm-hover-bridge.js';
 import { translatorBarScript } from '../webview-scripts/translator-bar.js';
 import { slashTemplatesScript } from '../webview-scripts/slash-templates.js';
+import { voiceTranscribeButtonsScript } from '../webview-scripts/voice-transcribe-buttons.js';
 import { insertTextScript } from '../webview-scripts/insert-text.js';
 import { activeChatContactScript } from '../webview-scripts/active-chat-contact.js';
 import {
@@ -271,6 +272,10 @@ function ensureWebview(account) {
       webview.executeJavaScript(slashTemplatesScript(WADECK_WV_TOKEN), true)
         .catch((e) => console.warn('[slash-templates-reload]', e));
     }
+    if (isWhatsApp && typeof voiceTranscribeButtonsScript === 'function') {
+      webview.executeJavaScript(voiceTranscribeButtonsScript(WADECK_WV_TOKEN), true)
+        .catch((e) => console.warn('[voice-buttons-reload]', e));
+    }
   };
 
   const onFailLoad = () => {
@@ -337,6 +342,9 @@ function ensureWebview(account) {
       }
       if (typeof slashTemplatesScript === 'function') {
         webview.executeJavaScript(slashTemplatesScript(WADECK_WV_TOKEN), true).catch((e) => console.warn('[slash-templates]', e));
+      }
+      if (typeof voiceTranscribeButtonsScript === 'function') {
+        webview.executeJavaScript(voiceTranscribeButtonsScript(WADECK_WV_TOKEN), true).catch((e) => console.warn('[voice-buttons]', e));
       }
     }
 
@@ -534,6 +542,17 @@ function ensureWebview(account) {
         })().catch(() => {});
         return;
       }
+      if (kind === 'TRANSCRIBE_VOICE') {
+        try {
+          const data = JSON.parse(String(payload || '{}'));
+          const voiceId = String(data?.id || '');
+          // id генерируется нашим же скриптом ([a-z0-9]) — всё прочее подделка
+          if (/^[a-z0-9]{1,32}$/i.test(voiceId)) {
+            window.waDeck.transcribeVoice({ webContentsId: webview.getWebContentsId(), voiceId });
+          }
+        } catch { /* битый payload — игнор */ }
+        return;
+      }
       if (kind === 'HEALTH') {
         console.warn('[wadeck-health]', acc.id, payload);
       }
@@ -553,7 +572,7 @@ function ensureWebview(account) {
     // Fallback transport: console markers (__WADECK_X__<token>:<json>), used
     // by guest scripts when the session preload didn't run for this load.
     // Messages with a missing or foreign token are silently ignored.
-    const GUEST_KINDS = ['CRM_HOVER', 'GET_LANG', 'SET_LANG', 'GET_AUTO_TR', 'SET_AUTO_TR', 'TRANSLATE_MSG', 'TRANSLATE', 'GET_TEMPLATES', 'INSERT_TEMPLATE', 'REPEAT_LAST_TEMPLATE', 'HEALTH'];
+    const GUEST_KINDS = ['CRM_HOVER', 'GET_LANG', 'SET_LANG', 'GET_AUTO_TR', 'SET_AUTO_TR', 'TRANSLATE_MSG', 'TRANSLATE', 'GET_TEMPLATES', 'INSERT_TEMPLATE', 'REPEAT_LAST_TEMPLATE', 'TRANSCRIBE_VOICE', 'HEALTH'];
     const GUEST_PREFIXES = GUEST_KINDS.map((kind) => [kind, `__WADECK_${kind}__${WADECK_WV_TOKEN}:`]);
     onConsoleMessage = (event) => {
       const message = String(event?.message || '');

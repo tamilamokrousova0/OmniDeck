@@ -57,27 +57,9 @@ function modelReady() {
 
 /* ── Инжектируемые скрипты ─────────────────────────────────────────── */
 
-/* Голосовое ищем по data-icon (переживает редизайны лучше классов — см.
-   voice-message.js) либо по уже созданному <audio> внутри ряда. */
-function voiceHitTestScript(x, y) {
-  return `(() => {
-    try {
-      const el = document.elementFromPoint(${Number(x) || 0}, ${Number(y) || 0});
-      if (!el) return { ok: false };
-      const row = el.closest('[role="row"]');
-      if (!row) return { ok: false };
-      const hasIcon = !!row.querySelector(
-        'span[data-icon*="audio-play"], span[data-icon*="audio-pause"], span[data-icon*="ptt"]');
-      const hasAudio = !!row.querySelector('audio');
-      if (!hasIcon && !hasAudio) return { ok: false };
-      const id = 'v' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
-      row.setAttribute('data-wadeck-voice-id', id);
-      return { ok: true, id };
-    } catch (err) {
-      return { ok: false, error: String(err && err.message || err) };
-    }
-  })();`;
-}
+/* Кнопка-триггер и метка data-wadeck-voice-id живут в renderer-инжекте
+   (src/renderer/webview-scripts/voice-transcribe-buttons.js): контекстное
+   меню на пузырях WhatsApp гасит (preventDefault), поэтому триггер — DOM. */
 
 /* Статус-плашка под пузырём. Финальный текст selectable (WhatsApp вешает
    user-select:none на чат — опт-аут как в __wadeck-tr-overlay). */
@@ -109,11 +91,13 @@ function voiceStatusScript(voiceId, text, kind) {
         ].join(';');
         row.appendChild(box);
       }
-      const kindStr = ${JSON.stringify(String(text || ''))};
-      box.textContent = kindStr;
-      box.style.borderColor = ${JSON.stringify(String(kind || ''))} === 'error'
-        ? 'rgba(240,80,80,0.6)' : 'rgba(45,140,240,0.55)';
-      box.style.opacity = ${JSON.stringify(String(kind || ''))} === 'progress' ? '0.75' : '1';
+      const msg = ${JSON.stringify(String(text || ''))};
+      const state = ${JSON.stringify(String(kind || 'progress'))};
+      box.textContent = msg;
+      /* state читает свип кнопок: error → кнопку вернуть (повторная попытка) */
+      box.dataset.state = state;
+      box.style.borderColor = state === 'error' ? 'rgba(240,80,80,0.6)' : 'rgba(45,140,240,0.55)';
+      box.style.opacity = state === 'progress' ? '0.75' : '1';
       return true;
     } catch {
       return false;
@@ -358,4 +342,4 @@ async function transcribeVoiceAt(contents, voiceId, parentWindow) {
   }
 }
 
-module.exports = { voiceHitTestScript, transcribeVoiceAt, whisperBinaryPath, modelReady };
+module.exports = { transcribeVoiceAt, whisperBinaryPath, modelReady };

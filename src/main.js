@@ -8,7 +8,7 @@ const { spawnSync, spawn } = require('child_process');
 const https = require('https');
 const { pathToFileURL } = require('url');
 const os = require('os');
-const { voiceHitTestScript, transcribeVoiceAt } = require('./voice-transcribe');
+const { transcribeVoiceAt } = require('./voice-transcribe');
 
 /*
  * Keep WhatsApp/Telegram webviews online while hidden.
@@ -2154,32 +2154,12 @@ function setupWebviewGuards() {
       console.warn('[webview] did-fail-load (main):', errorCode, errorDescription, validatedURL);
     });
 
-    contents.on('context-menu', async (_event, params) => {
+    contents.on('context-menu', (_event, params) => {
       const template = [];
       const selectionText = String(params?.selectionText || '').trim();
       const linkURL = String(params?.linkURL || '').trim();
       const srcURL = String(params?.srcURL || '').trim();
       const mediaType = String(params?.mediaType || '').trim().toLowerCase();
-
-      /* Клик по голосовому? Hit-test асинхронный, поэтому меню строится
-         после него; 300ms-гонка не даёт зависшему webview заморозить меню. */
-      let voiceHit = null;
-      if (!params?.isEditable && !isTelegram()) {
-        voiceHit = await Promise.race([
-          contents.executeJavaScript(voiceHitTestScript(params.x, params.y)).catch(() => null),
-          new Promise((r) => setTimeout(() => r(null), 300)),
-        ]);
-      }
-      if (voiceHit?.ok) {
-        const parentWin = BrowserWindow.fromWebContents(contents.hostWebContents || contents) || mainWindow;
-        template.push(
-          {
-            label: 'Расшифровать голосовое',
-            click: () => { transcribeVoiceAt(contents, voiceHit.id, parentWin); },
-          },
-          { type: 'separator' },
-        );
-      }
 
       appendSpellcheckMenuItems(template, contents, params);
 
@@ -3137,6 +3117,22 @@ function registerIpc() {
       console.error('[pick-audio-file]', err);
       return { ok: false, error: 'read_failed' };
     }
+  });
+
+  handle('transcribe-voice', async (_event, payload) => {
+    const wcId = Number(payload?.webContentsId);
+    const voiceId = String(payload?.voiceId || '');
+    if (!Number.isFinite(wcId) || !/^[a-z0-9]{1,32}$/i.test(voiceId)) {
+      return { ok: false, error: 'bad_args' };
+    }
+    const contents = webContents.fromId(wcId);
+    if (!contents || contents.isDestroyed() || contents.getType() !== 'webview'
+        || !String(contents.getURL() || '').startsWith('https://web.whatsapp.com')) {
+      return { ok: false, error: 'bad_target' };
+    }
+    // fire-and-forget: прогресс и результат рисуются плашкой у пузыря
+    transcribeVoiceAt(contents, voiceId, mainWindow);
+    return { ok: true };
   });
 
   handle('schedule-message', async (_event, payload) => {
