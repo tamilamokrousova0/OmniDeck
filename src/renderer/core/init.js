@@ -244,28 +244,58 @@ async function init() {
   renderAccounts();
   console.log(`[boot] sidebar painted +${_bootMs()}ms`);
 
-  // Staged background load: kick off webview creation for every account but
-  // staggered by STAGGER_MS so the UI stays responsive during initial paint.
-  // Startup time to "app usable" stays fast; unread counters populate over
-  // the next few seconds as each account boots. For 30 accounts this takes
-  // ~15s total, but the UI never freezes.
+  // Staged background load: очередь с ограничением параллелизма вместо
+  // фиксированного шага в 400мс. Каждый WhatsApp Web грузится 5–15с и ест CPU:
+  // при 10+ аккаунтах фиксированный шаг наслаивал загрузки, машина
+  // захлёбывалась и ВСЕ аккаунты грузились дольше. Теперь одновременно
+  // грузятся максимум LOAD_CONCURRENCY, следующий стартует по did-finish-load
+  // предыдущего; страховочный таймаут — зависший аккаунт не блокирует очередь.
+  // Приоритет: аккаунты с «Важными» чатами → с «Избранными» → остальные,
+  // внутри группы — порядок сайдбара.
   //
   // Note: all webviews stay alive for the lifetime of the app — idle-suspend
   // was removed because it caused WhatsApp accounts to drop messages while
   // suspended and forced users to re-click each account to reload WA Web.
-  const STAGGER_MS = 400;
-  for (let i = 0; i < state.accounts.length; i += 1) {
-    const account = state.accounts[i];
-    setTimeout(() => {
-      try {
-        ensureWebview(account);
-        const wv = state.webviews.get(account.id);
-        if (wv) wv._lastActive = Date.now();
-      } catch (err) {
-        console.error(`[init] failed to create webview for ${account.id}:`, err);
+  const LOAD_CONCURRENCY = 3;
+  const SLOT_TIMEOUT_MS = 20000;
+  const accountPriority = (acc) => {
+    if ((state.important || []).some((f) => f.accountId === acc.id)) return 0;
+    if ((state.favorites || []).some((f) => f.accountId === acc.id)) return 1;
+    return 2;
+  };
+  const bootQueue = state.accounts
+    .map((acc, idx) => ({ acc, idx }))
+    .sort((a, b) => (accountPriority(a.acc) - accountPriority(b.acc)) || (a.idx - b.idx))
+    .map((entry) => entry.acc);
+  let bootQueuePos = 0;
+  const launchNextWebview = () => {
+    if (bootQueuePos >= bootQueue.length) return;
+    const account = bootQueue[bootQueuePos];
+    bootQueuePos += 1;
+    let slotDone = false;
+    const releaseSlot = () => {
+      if (slotDone) return;
+      slotDone = true;
+      clearTimeout(slotGuard);
+      launchNextWebview();
+    };
+    const slotGuard = setTimeout(releaseSlot, SLOT_TIMEOUT_MS);
+    try {
+      ensureWebview(account);
+      const wv = state.webviews.get(account.id);
+      if (wv) {
+        wv._lastActive = Date.now();
+        wv.addEventListener('did-finish-load', releaseSlot, { once: true });
+        wv.addEventListener('did-fail-load', releaseSlot, { once: true });
+      } else {
+        releaseSlot();
       }
-    }, i * STAGGER_MS);
-  }
+    } catch (err) {
+      console.error(`[init] failed to create webview for ${account.id}:`, err);
+      releaseSlot();
+    }
+  };
+  for (let i = 0; i < LOAD_CONCURRENCY; i += 1) launchNextWebview();
 
   state.startupHubVisible = true;
   if (state.startupHubTimeoutId) {

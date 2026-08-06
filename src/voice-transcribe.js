@@ -64,6 +64,21 @@ function modelPath() {
   return path.join(app.getPath('userData'), 'whisper', MODEL_FILE);
 }
 
+/* Смена дефолтной модели оставляет прежнюю мёртвым грузом (small-q5_1 — 190 МБ
+   у всех, кто пользовался фичей до апгрейда). Сносим всё, что не текущая
+   модель, включая недокачанные .download. Зовётся из bootstrap. */
+function cleanupStaleModels() {
+  const dir = path.join(app.getPath('userData'), 'whisper');
+  fs.readdir(dir).then((files) => {
+    for (const f of files) {
+      if (f === MODEL_FILE) continue;
+      if (f.startsWith('ggml-') || f.endsWith('.download')) {
+        fs.unlink(path.join(dir, f)).catch(() => {});
+      }
+    }
+  }).catch(() => { /* каталога нет — фичей не пользовались */ });
+}
+
 function modelReady() {
   try {
     return fsSync.statSync(modelPath()).size >= MODEL_MIN_BYTES;
@@ -398,4 +413,4 @@ async function transcribeVoiceAt(contents, voiceId, parentWindow) {
   }
 }
 
-module.exports = { transcribeVoiceAt, whisperBinaryPath, modelReady };
+module.exports = { transcribeVoiceAt, whisperBinaryPath, modelReady, cleanupStaleModels };

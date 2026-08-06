@@ -8,7 +8,7 @@ const { spawnSync, spawn } = require('child_process');
 const https = require('https');
 const { pathToFileURL } = require('url');
 const os = require('os');
-const { transcribeVoiceAt } = require('./voice-transcribe');
+const { transcribeVoiceAt, cleanupStaleModels } = require('./voice-transcribe');
 
 /*
  * Keep WhatsApp/Telegram webviews online while hidden.
@@ -3851,6 +3851,7 @@ async function bootstrap() {
     app.setAppUserModelId(APP_ID);
   }
   ensurePaths();
+  cleanupStaleModels();
   await loadStore();
   _lastGoodAccountCount = Array.isArray(state.store?.accounts) ? state.store.accounts.length : 0;
   pruneFinishedScheduled();
