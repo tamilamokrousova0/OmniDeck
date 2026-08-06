@@ -77,6 +77,17 @@ function cleanupStaleModels() {
       }
     }
   }).catch(() => { /* каталога нет — фичей не пользовались */ });
+  // Временный WAV живёт только на время распознавания (unlink в finally), но
+  // kill/краш посреди расшифровки его осиротит — дометаем при старте
+  // (аудио не должно храниться нигде и никогда).
+  const tmp = app.getPath('temp');
+  fs.readdir(tmp).then((files) => {
+    for (const f of files) {
+      if (f.startsWith('wadeck-voice-') && f.endsWith('.wav')) {
+        fs.unlink(path.join(tmp, f)).catch(() => {});
+      }
+    }
+  }).catch(() => {});
 }
 
 function modelReady() {
