@@ -6,7 +6,7 @@
  * плашкой ПОД пузырём (не оверлеем — плеер должен остаться кликабельным).
  *
  * Бинарь: packaged — resources/whisper/, dev — brew (/opt/homebrew/bin).
- * Модель ggml-small-q5_1 (~190 МБ) НЕ вшита в дистрибутив: качается в
+ * Модель ggml-large-v3-turbo-q5_0 (~550 МБ) НЕ вшита в дистрибутив: качается в
  * userData/whisper при первом использовании после подтверждения диалогом.
  *
  * Побочный эффект by design: программный play отправляет отправителю
@@ -19,9 +19,11 @@ const fs = require('fs/promises');
 const fsSync = require('fs');
 const path = require('path');
 
-const MODEL_FILE = 'ggml-small-q5_1.bin';
+/* large-v3-turbo: качество large при скорости small (4 decoder-слоя).
+   small-q5_1 ронял/выдумывал последние слова коротких голосовых. */
+const MODEL_FILE = 'ggml-large-v3-turbo-q5_0.bin';
 const MODEL_URL = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${MODEL_FILE}`;
-const MODEL_MIN_BYTES = 150 * 1024 * 1024; // недокачанный файл не считаем моделью
+const MODEL_MIN_BYTES = 500 * 1024 * 1024; // недокачанный файл не считаем моделью
 const CAPTURE_TIMEOUT_MS = 25000;  // скачивание+расшифровка медиа самим WhatsApp
 const WHISPER_TIMEOUT_MS = 180000;
 
@@ -211,12 +213,15 @@ function voiceCaptureScript(voiceId) {
       }
 
       const rate = 16000;
-      const frames = Math.max(1, Math.ceil(decoded.duration * rate));
+      /* Тишина по краям (0.25с + 1с): whisper склонен ронять последнее слово,
+         когда речь упирается в самый конец файла. */
+      const LEAD = 0.25, TAIL = 1.0;
+      const frames = Math.max(1, Math.ceil((decoded.duration + LEAD + TAIL) * rate));
       const octx = new OfflineAudioContext(1, frames, rate);
       const osrc = octx.createBufferSource();
       osrc.buffer = decoded;
       osrc.connect(octx.destination);
-      osrc.start(0);
+      osrc.start(LEAD);
       const rendered = await octx.startRendering();
       const pcm = rendered.getChannelData(0);
 
@@ -235,7 +240,10 @@ function voiceCaptureScript(voiceId) {
 
       const bytes = new Uint8Array(wav);
       let b64 = '';
-      const CHUNK = 0x8000;
+      /* КРАТНО 3! btoa чанка, не кратного 3, кончается '='-паддингом, а
+         Buffer.from(..., 'base64') в main обрывает декод на первом внутреннем
+         паддинге — уезжал только первый чанк (32768 Б = 1 секунда аудио). */
+      const CHUNK = 0x7ffe;
       for (let i = 0; i < bytes.length; i += CHUNK) {
         b64 += btoa(String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK)));
       }
@@ -305,7 +313,7 @@ async function ensureModel(contents, voiceId, parentWindow) {
     defaultId: 0,
     cancelId: 1,
     title: 'Расшифровка голосовых',
-    message: 'Для расшифровки голосовых нужна модель распознавания речи (~190 МБ).',
+    message: 'Для расшифровки голосовых нужна модель распознавания речи (~550 МБ).',
     detail: 'Скачивается один раз, работает полностью локально — аудио никуда не отправляется.',
   });
   if (response !== 0) return false;
