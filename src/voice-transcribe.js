@@ -14,7 +14,7 @@
  */
 
 const { app, dialog, net } = require('electron');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const fs = require('fs/promises');
 const fsSync = require('fs');
 const path = require('path');
@@ -28,7 +28,10 @@ const WHISPER_TIMEOUT_MS = 180000;
 let _busy = false;
 let _modelDownloadPromise = null;
 
+let _binPathCache; // undefined = не проверяли, null = рабочего бинаря нет
+
 function whisperBinaryPath() {
+  if (_binPathCache !== undefined) return _binPathCache;
   const name = process.platform === 'win32' ? 'whisper-cli.exe' : 'whisper-cli';
   const candidates = [];
   if (app.isPackaged) {
@@ -40,7 +43,19 @@ function whisperBinaryPath() {
   // Локальные mac-сборки без CI-шага упаковываются с пустым resources/whisper —
   // brew-бинарь как последний фолбэк, чтобы фича не умирала молча.
   if (process.platform === 'darwin') candidates.push('/opt/homebrew/bin/whisper-cli');
-  return candidates.find((p) => fsSync.existsSync(p)) || null;
+  // existsSync мало: динамически слинкованный бинарь без своих dylib рядом
+  // (обломанный @rpath) существует, но умирает на dyld. Кандидат обязан
+  // реально запуститься — иначе переходим к следующему.
+  _binPathCache = candidates.find((p) => {
+    if (!fsSync.existsSync(p)) return false;
+    try {
+      const r = spawnSync(p, ['--help'], { timeout: 10000, windowsHide: true, cwd: path.dirname(p) });
+      return r.status === 0;
+    } catch {
+      return false;
+    }
+  }) || null;
+  return _binPathCache;
 }
 
 function modelPath() {
@@ -105,13 +120,21 @@ function voiceStatusScript(voiceId, text, kind) {
   })();`;
 }
 
-/* Захват аудио. Глушим все <audio> ДО клика play (blob появляется только
-   после старта воспроизведения), ловим blob-src поллингом, сразу ставим на
-   паузу, скачиваем blob и ресемплим в 16kHz mono WAV — формат whisper-cli. */
+/* Захват аудио. mid-2026 WhatsApp играет голосовые через DETACHED Audio —
+   элемент не попадает в DOM, так что поллинг document.querySelectorAll('audio')
+   его не видит (и заглушить заранее нельзя). Ловим инстанс хуком
+   HTMLMediaElement.prototype.play: глушим синхронно ДО старта звука, забираем
+   blob-src, ставим на паузу и возвращаем громкость. Старый путь (audio в DOM)
+   оставлен фолбэком для прежних ревизий разметки. Дальше — blob → 16kHz mono
+   WAV, формат whisper-cli. */
 function voiceCaptureScript(voiceId) {
   return `(async () => {
     const audios = () => Array.from(document.querySelectorAll('audio'));
     const mutedByUs = [];
+    const proto = HTMLMediaElement.prototype;
+    const origPlay = proto.play;
+    const hooked = { el: null, vol: 1 };
+    let hookInstalled = false;
     try {
       const row = document.querySelector('[data-wadeck-voice-id=${JSON.stringify(voiceId)}]');
       if (!row) return { ok: false, error: 'row_gone' };
@@ -127,17 +150,35 @@ function voiceCaptureScript(voiceId) {
         for (const a of audios()) {
           if (!a.muted) { a.muted = true; mutedByUs.push(a); }
         }
+        proto.play = function (...args) {
+          if (!hooked.el) {
+            hooked.el = this;
+            hooked.vol = this.volume;
+            try { this.muted = true; this.volume = 0; } catch (_) {}
+          }
+          return origPlay.apply(this, args);
+        };
+        hookInstalled = true;
+
         const playBtn = (() => {
-          const icon = row.querySelector('span[data-icon*="audio-play"], span[data-icon*="ptt"]');
+          const icon = row.querySelector('span[data-icon*="audio-play"]');
           const viaIcon = icon && (icon.closest('button') || icon.closest('[role="button"]'));
           if (viaIcon) return viaIcon;
-          return row.querySelector('button') || row.querySelector('[role="button"]');
+          /* новый DOM: у play-кнопки нет data-icon; отличаем её от кнопки
+             скорости («1×») по отсутствию текста */
+          const blank = Array.from(row.querySelectorAll('button')).find((b) => !(b.innerText || '').trim());
+          return blank || row.querySelector('button') || row.querySelector('[role="button"]');
         })();
         if (!playBtn) return { ok: false, error: 'play_button_not_found' };
         playBtn.click();
 
         const deadline = Date.now() + ${CAPTURE_TIMEOUT_MS};
         while (!src && Date.now() < deadline) {
+          if (hooked.el) {
+            try { hooked.el.muted = true; } catch (_) {}
+            const hs = String(hooked.el.src || '');
+            if (hs.startsWith('blob:')) { src = hs; break; }
+          }
           for (const a of audios()) {
             if (!a.muted) { a.muted = true; mutedByUs.push(a); }
             const s = String(a.src || '');
@@ -202,6 +243,13 @@ function voiceCaptureScript(voiceId) {
     } catch (err) {
       return { ok: false, error: String(err && err.message || err) };
     } finally {
+      if (hookInstalled) proto.play = origPlay;
+      if (hooked.el) {
+        /* сперва пауза, потом громкость — иначе секунда звука в динамики;
+           WhatsApp переиспользует один Audio, замьюченным его оставлять нельзя */
+        try { hooked.el.pause(); hooked.el.currentTime = 0; } catch (_) {}
+        try { hooked.el.muted = false; hooked.el.volume = hooked.vol; } catch (_) {}
+      }
       for (const a of mutedByUs) { try { a.muted = false; } catch (_) {} }
     }
   })();`;
