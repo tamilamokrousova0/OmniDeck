@@ -543,14 +543,13 @@ function ensureWebview(account) {
         return;
       }
       if (kind === 'TRANSCRIBE_VOICE') {
-        try {
-          const data = JSON.parse(String(payload || '{}'));
-          const voiceId = String(data?.id || '');
-          // id генерируется нашим же скриптом ([a-z0-9]) — всё прочее подделка
-          if (/^[a-z0-9]{1,32}$/i.test(voiceId)) {
-            window.waDeck.transcribeVoice({ webContentsId: webview.getWebContentsId(), voiceId });
-          }
-        } catch { /* битый payload — игнор */ }
+        // payload уже распарсен наверху диспатча — повторный JSON.parse
+        // здесь давал SyntaxError на "[object Object]" и молча глотал клик
+        const voiceId = String(payload.id || '');
+        // id генерируется нашим же скриптом ([a-z0-9]) — всё прочее подделка
+        if (/^[a-z0-9]{1,32}$/i.test(voiceId)) {
+          window.waDeck.transcribeVoice({ webContentsId: webview.getWebContentsId(), voiceId });
+        }
         return;
       }
       if (kind === 'HEALTH') {

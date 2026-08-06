@@ -116,6 +116,15 @@ function handleEscapeUiReset() {
   window.__waDeckOpenTemplatesDrawer = openTemplatesDrawer;
 
   document.addEventListener('keydown', (e) => {
+    // Cmd/Ctrl+A вне редактируемого поля выделял весь host-документ (синяя
+    // заливка всего окна, снималась только кликом по хрому). В полях деки и
+    // в композере WhatsApp (событие живёт в guest) select-all работает как раньше.
+    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyA' && !e.shiftKey && !e.altKey) {
+      const active = document.activeElement;
+      const inInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+      if (!inInput) e.preventDefault();
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && e.code === 'KeyK' && !e.shiftKey && !e.altKey) {
       e.preventDefault();
       window.WaDeckGlobalSearch?.toggle?.();
