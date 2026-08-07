@@ -156,11 +156,18 @@ jobs:
         shell: bash
         run: |
           version="${GITHUB_REF_NAME#v}"
-          awk -v ver="$version" '
-            $0 == "## " ver { capture=1; next }
-            capture && /^## / { exit }
-            capture { print }
-          ' CHANGELOG.md > release-notes.md
+          extract() {
+            awk -v ver="$1" '
+              $0 == "## " ver { capture=1; next }
+              capture && /^## / { exit }
+              capture { print }
+            ' CHANGELOG.md
+          }
+          extract "$version" > release-notes.md
+          # Пре-релизы (v0.9.6-preview.1) берут ноты базовой версии (## 0.9.6)
+          if [ ! -s release-notes.md ]; then
+            extract "${version%%-*}" > release-notes.md
+          fi
           if [ ! -s release-notes.md ]; then
             echo "Release notes for ${version} not found in CHANGELOG.md" >&2
             exit 1
