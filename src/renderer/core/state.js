@@ -97,6 +97,7 @@ const els = {
   aboutElectronVersion: document.getElementById('about-electron-version'),
   aboutChromiumVersion: document.getElementById('about-chromium-version'),
   wsettingsCity: document.getElementById('wsettings-city'),
+  settingTranscribeServer: document.getElementById('setting-transcribe-server'),
   wsettingsUnit: document.getElementById('wsettings-unit'),
   wsettingsSave: document.getElementById('wsettings-save'),
   wsettingsRefresh: document.getElementById('wsettings-refresh'),

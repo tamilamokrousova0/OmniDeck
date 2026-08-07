@@ -6,7 +6,7 @@
  * плашкой ПОД пузырём (не оверлеем — плеер должен остаться кликабельным).
  *
  * Бинарь: packaged — resources/whisper/, dev — brew (/opt/homebrew/bin).
- * Модель ggml-large-v3-turbo-q5_0 (~550 МБ) НЕ вшита в дистрибутив: качается в
+ * Модель (mac: large-v3-turbo ~550 МБ, win: small ~190 МБ) НЕ вшита в дистрибутив: качается в
  * userData/whisper при первом использовании после подтверждения диалогом.
  *
  * Побочный эффект by design: программный play отправляет отправителю
@@ -17,15 +17,23 @@ const { app, dialog, net } = require('electron');
 const { spawn, spawnSync } = require('child_process');
 const fs = require('fs/promises');
 const fsSync = require('fs');
+const os = require('os');
 const path = require('path');
 
-/* large-v3-turbo: качество large при скорости small (4 decoder-слоя).
-   small-q5_1 ронял/выдумывал последние слова коротких голосовых. */
-const MODEL_FILE = 'ggml-large-v3-turbo-q5_0.bin';
+/* Локальная модель — по платформе. mac: large-v3-turbo (качество large при
+   скорости small — Metal). Windows: small — turbo на чистом CPU слабых машин
+   не успевала до таймаута (90% CPU и обрыв). Качество на Windows добирается
+   сервером расшифровки (settings.transcribeServerUrl), локальная — фолбэк. */
+const IS_WIN = process.platform === 'win32';
+const MODEL_FILE = IS_WIN ? 'ggml-small-q5_1.bin' : 'ggml-large-v3-turbo-q5_0.bin';
 const MODEL_URL = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${MODEL_FILE}`;
-const MODEL_MIN_BYTES = 500 * 1024 * 1024; // недокачанный файл не считаем моделью
+const MODEL_MIN_BYTES = (IS_WIN ? 150 : 500) * 1024 * 1024; // недокачанный файл не считаем моделью
+const MODEL_HUMAN_SIZE = IS_WIN ? '~190 МБ' : '~550 МБ';
 const CAPTURE_TIMEOUT_MS = 25000;  // скачивание+расшифровка медиа самим WhatsApp
-const WHISPER_TIMEOUT_MS = 180000;
+const WHISPER_TIMEOUT_MS = 300000; // слабый CPU + длинное голосовое — это долго
+const SERVER_TIMEOUT_MS = 90000;
+// whisper-cli по умолчанию берёт 4 потока — на 8-ядерных половина простаивает
+const WHISPER_THREADS = Math.max(2, os.cpus().length - 1);
 
 let _busy = false;
 let _modelDownloadPromise = null;
@@ -339,7 +347,7 @@ async function ensureModel(contents, voiceId, parentWindow) {
     defaultId: 0,
     cancelId: 1,
     title: 'Расшифровка голосовых',
-    message: 'Для расшифровки голосовых нужна модель распознавания речи (~550 МБ).',
+    message: `Для расшифровки голосовых нужна модель распознавания речи (${MODEL_HUMAN_SIZE}).`,
     detail: 'Скачивается один раз, работает полностью локально — аудио никуда не отправляется.',
   });
   if (response !== 0) return false;
@@ -349,7 +357,7 @@ async function ensureModel(contents, voiceId, parentWindow) {
 
 function runWhisper(binPath, wavPath) {
   return new Promise((resolve, reject) => {
-    const args = ['-m', modelPath(), '-f', wavPath, '-l', 'auto', '-nt', '-np'];
+    const args = ['-m', modelPath(), '-f', wavPath, '-l', 'auto', '-nt', '-np', '-t', String(WHISPER_THREADS)];
     const child = spawn(binPath, args, { cwd: path.dirname(binPath), windowsHide: true });
     let out = '';
     let errOut = '';
@@ -371,11 +379,33 @@ function runWhisper(binPath, wavPath) {
   });
 }
 
+/* Серверная расшифровка: POST WAV на whisper-server (/inference). Аудио
+   уходит ТОЛЬКО на настроенный пользователем адрес (обычно свой сервер в
+   tailnet) и нигде не сохраняется. Любая ошибка — throw, вызывающий падает
+   обратно на локальную модель. */
+async function transcribeViaServer(serverUrl, wavBuffer) {
+  const url = `${serverUrl.replace(/\/+$/, '')}/inference`;
+  const form = new FormData();
+  form.append('file', new Blob([wavBuffer], { type: 'audio/wav' }), 'voice.wav');
+  form.append('response_format', 'json');
+  const resp = await net.fetch(url, {
+    method: 'POST',
+    body: form,
+    signal: AbortSignal.timeout(SERVER_TIMEOUT_MS),
+  });
+  if (!resp.ok) throw new Error(`server HTTP ${resp.status}`);
+  const data = await resp.json();
+  const text = String(data?.text || '').trim();
+  if (!text) throw new Error('server empty text');
+  return text;
+}
+
 /**
  * Полный флоу по клику меню. Ошибки показываются плашкой у пузыря,
- * наружу не бросаются.
+ * наружу не бросаются. serverUrl задан — расшифровка на whisper-server,
+ * локальная модель остаётся фолбэком (сервер выключен/недоступен — фича живёт).
  */
-async function transcribeVoiceAt(contents, voiceId, parentWindow) {
+async function transcribeVoiceAt(contents, voiceId, parentWindow, serverUrl) {
   if (_busy) {
     await setStatus(contents, voiceId, 'Уже идёт другая расшифровка — повторите позже', 'error');
     return;
@@ -383,13 +413,19 @@ async function transcribeVoiceAt(contents, voiceId, parentWindow) {
   _busy = true;
   const wavPath = path.join(app.getPath('temp'), `wadeck-voice-${Date.now()}.wav`);
   try {
-    const binPath = whisperBinaryPath();
-    if (!binPath) {
-      await setStatus(contents, voiceId,
-        'Модуль распознавания не найден (whisper-cli). Переустановите приложение.', 'error');
-      return;
+    serverUrl = String(serverUrl || '').trim();
+    let binPath = null;
+    if (!serverUrl) {
+      // Локальный путь: предпосылки (бинарь, модель с диалогом скачивания) —
+      // ДО захвата, чтобы не дёргать play голосового впустую.
+      binPath = whisperBinaryPath();
+      if (!binPath) {
+        await setStatus(contents, voiceId,
+          'Модуль распознавания не найден (whisper-cli). Переустановите приложение.', 'error');
+        return;
+      }
+      if (!(await ensureModel(contents, voiceId, parentWindow))) return;
     }
-    if (!(await ensureModel(contents, voiceId, parentWindow))) return;
 
     await setStatus(contents, voiceId, '⏳ Получаю аудио…');
     const captured = await contents.executeJavaScript(voiceCaptureScript(voiceId));
@@ -404,10 +440,30 @@ async function transcribeVoiceAt(contents, voiceId, parentWindow) {
         reasons[captured?.error] || `Ошибка захвата: ${captured?.error || 'unknown'}`, 'error');
       return;
     }
+    const wavBuffer = Buffer.from(captured.wav, 'base64');
+    const durationLabel = `${Math.round(captured.duration)} c аудио`;
 
-    await fs.writeFile(wavPath, Buffer.from(captured.wav, 'base64'));
-    await setStatus(contents, voiceId,
-      `⏳ Расшифровка (${Math.round(captured.duration)} c аудио)…`);
+    if (serverUrl) {
+      await setStatus(contents, voiceId, `⏳ Расшифровка на сервере (${durationLabel})…`);
+      try {
+        const text = await transcribeViaServer(serverUrl, wavBuffer);
+        await setStatus(contents, voiceId, `🎤 ${text}`, 'final');
+        return;
+      } catch (err) {
+        console.warn('[voice-transcribe] сервер недоступен, фолбэк на локальную модель:',
+          String(err?.message || err));
+        binPath = whisperBinaryPath();
+        if (!binPath) {
+          await setStatus(contents, voiceId,
+            'Сервер расшифровки недоступен, локальный модуль не найден. Проверьте адрес сервера в настройках.', 'error');
+          return;
+        }
+        if (!(await ensureModel(contents, voiceId, parentWindow))) return;
+      }
+    }
+
+    await fs.writeFile(wavPath, wavBuffer);
+    await setStatus(contents, voiceId, `⏳ Расшифровка (${durationLabel})…`);
     const text = await runWhisper(binPath, wavPath);
     if (!text) {
       await setStatus(contents, voiceId, 'Речь не распознана (пустой результат)', 'error');

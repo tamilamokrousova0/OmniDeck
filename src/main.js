@@ -131,6 +131,8 @@ const DEFAULT_SETTINGS = {
   autoTranslateAccounts: {},
   // Батчинг автоперевода входящих: пачка сообщений одним запросом.
   translateBatchEnabled: true,
+  // Сервер расшифровки голосовых (whisper-server). Пусто — локальная модель.
+  transcribeServerUrl: '',
 };
 
 const VALID_HIBERNATE_MINUTES = [0, 30, 60, 120, 240];
@@ -382,6 +384,10 @@ function sanitizeStore(raw) {
     clean.settings.lastSeenReleaseNotesVersion || DEFAULT_SETTINGS.lastSeenReleaseNotesVersion,
   ).trim();
   clean.settings.weatherCity = String(clean.settings.weatherCity || DEFAULT_SETTINGS.weatherCity).trim() || DEFAULT_SETTINGS.weatherCity;
+  {
+    const v = String(clean.settings.transcribeServerUrl || '').trim().slice(0, 200);
+    clean.settings.transcribeServerUrl = /^https?:\/\/\S+$/i.test(v) ? v.replace(/\/+$/, '') : '';
+  }
   clean.settings.weatherUnit = normalizeWeatherUnit(clean.settings.weatherUnit);
   clean.settings.translatorEnabled = normalizeBool(clean.settings.translatorEnabled, DEFAULT_SETTINGS.translatorEnabled);
   clean.settings.notificationsEnabled = normalizeBool(clean.settings.notificationsEnabled, DEFAULT_SETTINGS.notificationsEnabled);
@@ -3041,6 +3047,12 @@ function registerIpc() {
         payload?.hibernateAfterMinutes,
         normalizeHibernateMinutes(current.hibernateAfterMinutes, DEFAULT_SETTINGS.hibernateAfterMinutes),
       ),
+      // Сервер расшифровки: только http(s)-URL, хвостовые слэши срезаем;
+      // всё невалидное схлопывается в '' (= локальная расшифровка).
+      transcribeServerUrl: (() => {
+        const v = String(payload?.transcribeServerUrl ?? current.transcribeServerUrl ?? '').trim().slice(0, 200);
+        return /^https?:\/\/\S+$/i.test(v) ? v.replace(/\/+$/, '') : '';
+      })(),
     };
 
     state.store.settings = next;
@@ -3131,7 +3143,8 @@ function registerIpc() {
       return { ok: false, error: 'bad_target' };
     }
     // fire-and-forget: прогресс и результат рисуются плашкой у пузыря
-    transcribeVoiceAt(contents, voiceId, mainWindow);
+    transcribeVoiceAt(contents, voiceId, mainWindow,
+      String(state.store?.settings?.transcribeServerUrl || ''));
     return { ok: true };
   });
 

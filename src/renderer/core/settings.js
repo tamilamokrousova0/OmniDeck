@@ -154,6 +154,9 @@ function applySettingsToForm(options = {}) {
   if (els.settingHibernateMinutes) {
     els.settingHibernateMinutes.value = String(getHibernateMinutes());
   }
+  if (els.settingTranscribeServer) {
+    els.settingTranscribeServer.value = String(state.settings?.transcribeServerUrl || '');
+  }
   // Only render the weather summary when explicitly requested (init / weather
   // settings save). Rendering it with `loading: false` after every
   // save-settings call blanks the temperature until the next 30-min refresh,
@@ -587,6 +590,7 @@ async function saveSettings() {
     uiDensity: String(state.settings?.uiDensity || 'cozy'),
     tweaksCollapsed: !!state.settings?.tweaksCollapsed,
     hibernateAfterMinutes: getHibernateMinutes(),
+    transcribeServerUrl: String(state.settings?.transcribeServerUrl || '').trim(),
     // Без этого поля per-account тумблер «Авто вх.» затирался каждым
     // сохранением настроек (main берёт fallback current и пишет старое).
     autoTranslateAccounts: state.settings?.autoTranslateAccounts || {},
