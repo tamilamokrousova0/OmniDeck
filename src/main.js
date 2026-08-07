@@ -131,12 +131,6 @@ const DEFAULT_SETTINGS = {
   autoTranslateAccounts: {},
   // Батчинг автоперевода входящих: пачка сообщений одним запросом.
   translateBatchEnabled: true,
-  // Сервер расшифровки голосовых (whisper-server, tailnet Mac mini).
-  // Недоступен (нет Tailscale/сервер выключен) — тихий фолбэк на локальную
-  // модель. Пустая строка в сторе = юзер сознательно выбрал локально.
-  transcribeServerUrl: 'http://100.69.224.117:8790',
-  // 'server' — большая модель на whisper-server; 'local' — компактная на месте.
-  transcribeMode: 'server',
 };
 
 const VALID_HIBERNATE_MINUTES = [0, 30, 60, 120, 240];
@@ -388,11 +382,10 @@ function sanitizeStore(raw) {
     clean.settings.lastSeenReleaseNotesVersion || DEFAULT_SETTINGS.lastSeenReleaseNotesVersion,
   ).trim();
   clean.settings.weatherCity = String(clean.settings.weatherCity || DEFAULT_SETTINGS.weatherCity).trim() || DEFAULT_SETTINGS.weatherCity;
-  {
-    const v = String(clean.settings.transcribeServerUrl || '').trim().slice(0, 200);
-    clean.settings.transcribeServerUrl = /^https?:\/\/\S+$/i.test(v) ? v.replace(/\/+$/, '') : '';
-    clean.settings.transcribeMode = String(clean.settings.transcribeMode || 'server') === 'local' ? 'local' : 'server';
-  }
+  // Остатки серверной расшифровки (0.9.6-preview) в старых сторах игнорируются:
+  // ниже поля не в whitelist save-settings и отомрут при первом сохранении.
+  delete clean.settings.transcribeServerUrl;
+  delete clean.settings.transcribeMode;
   clean.settings.weatherUnit = normalizeWeatherUnit(clean.settings.weatherUnit);
   clean.settings.translatorEnabled = normalizeBool(clean.settings.translatorEnabled, DEFAULT_SETTINGS.translatorEnabled);
   clean.settings.notificationsEnabled = normalizeBool(clean.settings.notificationsEnabled, DEFAULT_SETTINGS.notificationsEnabled);
@@ -3052,14 +3045,6 @@ function registerIpc() {
         payload?.hibernateAfterMinutes,
         normalizeHibernateMinutes(current.hibernateAfterMinutes, DEFAULT_SETTINGS.hibernateAfterMinutes),
       ),
-      // Сервер расшифровки: только http(s)-URL, хвостовые слэши срезаем;
-      // всё невалидное схлопывается в '' (= локальная расшифровка).
-      transcribeServerUrl: (() => {
-        const v = String(payload?.transcribeServerUrl ?? current.transcribeServerUrl ?? '').trim().slice(0, 200);
-        return /^https?:\/\/\S+$/i.test(v) ? v.replace(/\/+$/, '') : '';
-      })(),
-      transcribeMode: String(payload?.transcribeMode ?? current.transcribeMode ?? DEFAULT_SETTINGS.transcribeMode) === 'local'
-        ? 'local' : 'server',
     };
 
     state.store.settings = next;
@@ -3149,11 +3134,8 @@ function registerIpc() {
         || !String(contents.getURL() || '').startsWith('https://web.whatsapp.com')) {
       return { ok: false, error: 'bad_target' };
     }
-    // fire-and-forget: прогресс и результат рисуются плашкой у пузыря.
-    // Режим «Локально» отключает серверный путь целиком.
-    const useServer = state.store?.settings?.transcribeMode !== 'local';
-    transcribeVoiceAt(contents, voiceId, mainWindow,
-      useServer ? String(state.store?.settings?.transcribeServerUrl || '') : '');
+    // fire-and-forget: прогресс и результат рисуются плашкой у пузыря
+    transcribeVoiceAt(contents, voiceId, mainWindow);
     return { ok: true };
   });
 

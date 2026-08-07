@@ -208,29 +208,6 @@ function bindActions() {
     autoSaveWeather();
   });
   els.wsettingsUnit?.addEventListener('change', () => autoSaveWeather());
-
-  // Сервер расшифровки голосовых: авто-сохранение с дебаунсом, как погода.
-  const autoSaveTranscribeServer = async () => {
-    const url = String(els.settingTranscribeServer?.value || '').trim();
-    if (url === String(state.settings?.transcribeServerUrl || '')) return;
-    state.settings = { ...(state.settings || {}), transcribeServerUrl: url };
-    try { await saveSettings(); } catch { /* saveSettings already reported */ }
-  };
-  els.settingTranscribeMode?.addEventListener('change', async () => {
-    const mode = els.settingTranscribeMode.value === 'local' ? 'local' : 'server';
-    if (mode === String(state.settings?.transcribeMode || 'server')) return;
-    state.settings = { ...(state.settings || {}), transcribeMode: mode };
-    try { await saveSettings(); } catch { /* saveSettings already reported */ }
-  });
-  let _transcribeServerDebounce = null;
-  els.settingTranscribeServer?.addEventListener('input', () => {
-    if (_transcribeServerDebounce) clearTimeout(_transcribeServerDebounce);
-    _transcribeServerDebounce = setTimeout(autoSaveTranscribeServer, 700);
-  });
-  els.settingTranscribeServer?.addEventListener('blur', () => {
-    if (_transcribeServerDebounce) { clearTimeout(_transcribeServerDebounce); _transcribeServerDebounce = null; }
-    autoSaveTranscribeServer();
-  });
   els.wsettingsRefresh?.addEventListener('click', () => {
     WaDeckWeatherModule.refreshWeather().catch(console.error);
     setStatus('Обновляю погоду…');

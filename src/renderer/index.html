@@ -388,23 +388,6 @@
               <option value="240">4 ч</option>
             </select>
           </label>
-          <label class="toggle-row">
-            <span class="toggle-row-text">
-              <span class="toggle-row-title">Расшифровка голосовых</span>
-              <span class="toggle-row-hint">На сервере — качество большой модели даже на слабом компьютере (нужен запущенный Tailscale); сервер недоступен — тихо переключимся на локальную. Локально — без сети, компактная модель на этом компьютере.</span>
-            </span>
-            <select id="setting-transcribe-mode" class="settings-select">
-              <option value="server">На сервере (большая модель)</option>
-              <option value="local">Локально (компактная модель)</option>
-            </select>
-          </label>
-          <label class="toggle-row">
-            <span class="toggle-row-text">
-              <span class="toggle-row-title">Адрес сервера расшифровки</span>
-              <span class="toggle-row-hint">whisper-server, на который уходит аудио (только в режиме «На сервере»).</span>
-            </span>
-            <input id="setting-transcribe-server" type="text" class="settings-select" placeholder="http://100.69.224.117:8790" maxlength="200" spellcheck="false" />
-          </label>
         </details>
         </section>
 
