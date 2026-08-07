@@ -98,6 +98,7 @@ const els = {
   aboutChromiumVersion: document.getElementById('about-chromium-version'),
   wsettingsCity: document.getElementById('wsettings-city'),
   settingTranscribeServer: document.getElementById('setting-transcribe-server'),
+  settingTranscribeMode: document.getElementById('setting-transcribe-mode'),
   wsettingsUnit: document.getElementById('wsettings-unit'),
   wsettingsSave: document.getElementById('wsettings-save'),
   wsettingsRefresh: document.getElementById('wsettings-refresh'),

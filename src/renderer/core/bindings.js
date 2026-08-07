@@ -216,6 +216,12 @@ function bindActions() {
     state.settings = { ...(state.settings || {}), transcribeServerUrl: url };
     try { await saveSettings(); } catch { /* saveSettings already reported */ }
   };
+  els.settingTranscribeMode?.addEventListener('change', async () => {
+    const mode = els.settingTranscribeMode.value === 'local' ? 'local' : 'server';
+    if (mode === String(state.settings?.transcribeMode || 'server')) return;
+    state.settings = { ...(state.settings || {}), transcribeMode: mode };
+    try { await saveSettings(); } catch { /* saveSettings already reported */ }
+  });
   let _transcribeServerDebounce = null;
   els.settingTranscribeServer?.addEventListener('input', () => {
     if (_transcribeServerDebounce) clearTimeout(_transcribeServerDebounce);

@@ -157,6 +157,9 @@ function applySettingsToForm(options = {}) {
   if (els.settingTranscribeServer) {
     els.settingTranscribeServer.value = String(state.settings?.transcribeServerUrl || '');
   }
+  if (els.settingTranscribeMode) {
+    els.settingTranscribeMode.value = state.settings?.transcribeMode === 'local' ? 'local' : 'server';
+  }
   // Only render the weather summary when explicitly requested (init / weather
   // settings save). Rendering it with `loading: false` after every
   // save-settings call blanks the temperature until the next 30-min refresh,
@@ -591,6 +594,7 @@ async function saveSettings() {
     tweaksCollapsed: !!state.settings?.tweaksCollapsed,
     hibernateAfterMinutes: getHibernateMinutes(),
     transcribeServerUrl: String(state.settings?.transcribeServerUrl || '').trim(),
+    transcribeMode: state.settings?.transcribeMode === 'local' ? 'local' : 'server',
     // Без этого поля per-account тумблер «Авто вх.» затирался каждым
     // сохранением настроек (main берёт fallback current и пишет старое).
     autoTranslateAccounts: state.settings?.autoTranslateAccounts || {},
