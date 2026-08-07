@@ -131,8 +131,10 @@ const DEFAULT_SETTINGS = {
   autoTranslateAccounts: {},
   // Батчинг автоперевода входящих: пачка сообщений одним запросом.
   translateBatchEnabled: true,
-  // Сервер расшифровки голосовых (whisper-server). Пусто — локальная модель.
-  transcribeServerUrl: '',
+  // Сервер расшифровки голосовых (whisper-server, tailnet Mac mini).
+  // Недоступен (нет Tailscale/сервер выключен) — тихий фолбэк на локальную
+  // модель. Пустая строка в сторе = юзер сознательно выбрал локально.
+  transcribeServerUrl: 'http://100.69.224.117:8790',
 };
 
 const VALID_HIBERNATE_MINUTES = [0, 30, 60, 120, 240];
