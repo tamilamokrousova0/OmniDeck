@@ -790,12 +790,21 @@ const _trWithDeadline = (p, ms) => Promise.race([
   new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_queue')), ms)),
 ]);
 
+/* Два взаимозаменяемых бесплатных endpoint'а Google Translate: gtx
+ * (translate.googleapis.com) Google банит по IP пачками (429 «Sorry...»
+ * на всю сеть), dict-chrome-ex (clients5.google.com) живёт на другом
+ * anti-abuse контуре и продолжает отвечать. Формат ответа dict зависит от
+ * sl: auto → [[перевод, detected]], фиксированный → [перевод]. */
+let _trEndpoint = 'gtx'; // sticky: после успешного фолбэка остаёмся на рабочем
+
 /* Один HTTP-запрос к переводчику. Возвращает { translated, detected } —
  * detected (определённый язык источника) раньше выбрасывался, теперь питает
  * автоопределение языка контакта в translator-bar. */
-function _translateFetchRaw(q, from, to) {
+function _translateFetchRaw(q, from, to, ep = 'gtx') {
   const https = require('https');
-  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(from)}&tl=${encodeURIComponent(to)}&dt=t&q=${encodeURIComponent(q)}`;
+  const url = ep === 'dict'
+    ? `https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=${encodeURIComponent(from)}&tl=${encodeURIComponent(to)}&q=${encodeURIComponent(q)}`
+    : `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(from)}&tl=${encodeURIComponent(to)}&dt=t&q=${encodeURIComponent(q)}`;
   return new Promise((resolve, reject) => {
     const req = https.get(url, {
       agent: _translateAgent,
@@ -820,9 +829,16 @@ function _translateFetchRaw(q, from, to) {
       res.on('end', () => {
         try {
           const parsed = JSON.parse(data);
-          const translated = (parsed[0] || []).map((s) => s[0]).filter(Boolean).join('');
-          const detected = String(parsed[2] || '').toLowerCase().slice(0, 10);
-          resolve({ translated, detected });
+          if (ep === 'dict') {
+            const first = Array.isArray(parsed) ? parsed[0] : null;
+            const translated = Array.isArray(first) ? String(first[0] || '') : String(first || '');
+            const detected = Array.isArray(first) ? String(first[1] || '').toLowerCase().slice(0, 10) : '';
+            resolve({ translated, detected });
+          } else {
+            const translated = (parsed[0] || []).map((s) => s[0]).filter(Boolean).join('');
+            const detected = String(parsed[2] || '').toLowerCase().slice(0, 10);
+            resolve({ translated, detected });
+          }
         } catch (e) {
           reject(new Error('parse_failed'));
         }
@@ -833,15 +849,32 @@ function _translateFetchRaw(q, from, to) {
   });
 }
 
-/* Дедлайн поверх очереди агента + один быстрый ретрай на транзиентном сбое. */
+/* Дедлайн поверх очереди агента, быстрый ретрай на транзиентном сбое и
+ * фолбэк на альтернативный endpoint. 429/403 = IP-бан текущего endpoint'а —
+ * ретраить его бессмысленно, сразу уходим на альтернативный; успех там
+ * переключает sticky-предпочтение до конца сессии. */
 async function _translateFetchRetry(q, from, to) {
+  const primary = _trEndpoint;
+  const alt = primary === 'gtx' ? 'dict' : 'gtx';
+  let lastErr;
   try {
-    return await _trWithDeadline(_translateFetchRaw(q, from, to), 15000);
+    return await _trWithDeadline(_translateFetchRaw(q, from, to, primary), 15000);
   } catch (e1) {
-    if (!_trIsTransient(e1)) throw e1;
-    await new Promise((r) => setTimeout(r, 250));
-    return _trWithDeadline(_translateFetchRaw(q, from, to), 15000);
+    lastErr = e1;
+    const banned = /http_(429|403)/.test(String(e1?.message || ''));
+    if (_trIsTransient(e1) && !banned) {
+      await new Promise((r) => setTimeout(r, 250));
+      try {
+        return await _trWithDeadline(_translateFetchRaw(q, from, to, primary), 15000);
+      } catch (e2) { lastErr = e2; }
+    }
   }
+  const r = await _trWithDeadline(_translateFetchRaw(q, from, to, alt), 15000);
+  if (_trEndpoint !== alt) {
+    console.warn(`[translate] endpoint ${primary} failed (${lastErr?.message || lastErr}) — switching to ${alt}`);
+    _trEndpoint = alt;
+  }
+  return r;
 }
 
 async function _flushTranslateBatch(key) {

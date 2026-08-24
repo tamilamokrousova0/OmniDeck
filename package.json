@@ -1,6 +1,6 @@
 {
   "name": "wa-deck",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "description": "WA Deck: multi-account WhatsApp manager",
   "main": "src/main.js",
   "scripts": {
@@ -21,7 +21,7 @@
     "electron-updater": "^6.3.9"
   },
   "devDependencies": {
-    "electron": "^43.1.1",
+    "electron": "^43.4.1",
     "electron-builder": "^26.8.1",
     "esbuild": "^0.28.1"
   },
