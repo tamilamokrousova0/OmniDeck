@@ -1,4 +1,5 @@
 import { collectUnreadCountScript } from './webview-scripts/unread-count.js';
+import { collectTgUnreadCountScript } from './webview-scripts/tg-unread.js';
 
   let state, els, renderAccounts, isWebviewReady, safeExecuteInWebview, updateHubDashboard;
   let _hubDashboardDebounceTimer = null;
@@ -149,13 +150,18 @@ import { collectUnreadCountScript } from './webview-scripts/unread-count.js';
         const tasks = batch.map(async (account) => {
           const webview = state.webviews.get(account.id);
           if (!isWebviewReady(webview)) return;
+          const isTg = account.type === 'telegram';
           // safeExecuteInWebview never rejects — it resolves null on failure.
           // The webview script returns -1 when it could not count. In both
           // cases keep the previous counter instead of resetting it to 0.
-          const raw = await safeExecuteInWebview(webview, collectUnreadCountScript(), true);
+          const script = isTg ? collectTgUnreadCountScript() : collectUnreadCountScript();
+          const raw = await safeExecuteInWebview(webview, script, true);
           const count = Number(raw);
           if (raw === null || !Number.isFinite(count) || count < 0) return;
           setUnreadCount(account.id, count);
+          // Системные уведомления для Telegram живут на приросте счётчика
+          // аккаунта (у WhatsApp — на per-contact ленте pin-feed).
+          if (isTg) window.WaDeckNotifications?.observeAccount?.(account, count);
         });
         await Promise.allSettled(tasks);
         /* Pause between batches to spread CPU load */

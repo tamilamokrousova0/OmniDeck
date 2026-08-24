@@ -17,6 +17,7 @@ import { handleCrmHover, hideCrmHoverPopover } from './crm-hover.js';
 import { WaDeckUnreadModule } from '../unread.js';
 import { WaDeckScheduleModule } from '../schedule.js';
 import { keepAliveScript } from '../webview-scripts/keep-alive.js';
+import { tgBadgeInterceptScript } from '../webview-scripts/tg-unread.js';
 import { bridgeScript } from '../webview-scripts/bridge.js';
 import { crmHoverBridgeScript } from '../webview-scripts/crm-hover-bridge.js';
 import { translatorBarScript } from '../webview-scripts/translator-bar.js';
@@ -291,6 +292,10 @@ function ensureWebview(account) {
   };
 
   const onPageTitle = (event) => {
+    // Только WhatsApp: у Telegram Web A заголовок — имя открытого чата или
+    // «Telegram», счётчика там нет, а «(3)» в имени чата дало бы ложный бейдж.
+    // Счётчик TG идёт через перехват setAppBadge (см. tg-unread.js).
+    if (!isWhatsApp) return;
     const title = String(event?.title || '');
     const count = WaDeckUnreadModule.parseUnreadFromTitle(title);
     WaDeckUnreadModule.setUnreadCount(accountId, count);
@@ -322,6 +327,14 @@ function ensureWebview(account) {
     if (typeof keepAliveScript === 'function') {
       webview.executeJavaScript(keepAliveScript(), true)
         .catch((e) => console.warn('[keep-alive]', e));
+    }
+
+    // Telegram: перехват navigator.setAppBadge — источник счётчика
+    // непрочитанных (см. tg-unread.js). Идемпотентен, повторный инжект
+    // после reload безопасен.
+    if (!isWhatsApp && typeof tgBadgeInterceptScript === 'function') {
+      webview.executeJavaScript(tgBadgeInterceptScript(), true)
+        .catch((e) => console.warn('[tg-badge]', e));
     }
 
     // WhatsApp-specific script injection

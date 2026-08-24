@@ -48,7 +48,8 @@ function updateToolbarState() {
   // Кнопка обновления активна и в хабе (нет активного аккаунта) — там она
   // обновляет ВСЕ аккаунты; дизейблим только когда аккаунтов нет вовсе.
   if (els.refreshActive) els.refreshActive.disabled = !(state.accounts && state.accounts.length);
-  if (els.freezeActive) { els.freezeActive.disabled = !isWa; els.freezeActive.style.display = isWa || !hasActive ? '' : 'none'; }
+  // Заморозка работает для обоих типов (механика — снос webview, типонезависима)
+  if (els.freezeActive) { els.freezeActive.disabled = !hasActive; els.freezeActive.style.display = ''; }
   if (els.openCrmModal) { els.openCrmModal.disabled = !isWa; els.openCrmModal.style.display = isWa || !hasActive ? '' : 'none'; }
   if (els.sendVoiceMsg) { els.sendVoiceMsg.disabled = !isWa; els.sendVoiceMsg.style.display = isWa || !hasActive ? '' : 'none'; }
 }
@@ -59,8 +60,8 @@ function updateFreezeButtonState() {
   const frozen = Boolean(account?.frozen);
   els.freezeActive.classList.toggle('is-active', frozen);
   els.freezeActive.title = frozen
-    ? 'Разморозить активный WhatsApp'
-    : 'Заморозить/разморозить активный WhatsApp';
+    ? 'Разморозить активный аккаунт'
+    : 'Заморозить/разморозить активный аккаунт';
 }
 
 function selectedWebview() {
@@ -381,8 +382,6 @@ function showAccountContextMenu(event, accountOrId) {
   menu.className = 'context-menu context-menu--account';
   menu.id = 'account-context-menu';
 
-  const isWa = account.type !== 'telegram';
-
   const items = [
     { label: 'Обновить', icon: CM_ICON.refresh, action: () => { setActiveAccount(account.id); requestAnimationFrame(() => refreshActiveWebview()); } },
     {
@@ -391,12 +390,12 @@ function showAccountContextMenu(event, accountOrId) {
       iconClass: account.pinned ? 'is-on' : '',
       action: () => { setAccountPinnedState(account.id, !account.pinned).catch(console.error); },
     },
-    ...(isWa ? [{
+    {
       label: account.frozen ? 'Разморозить' : 'Заморозить',
       icon: CM_ICON.snowflake,
       iconClass: account.frozen ? 'is-on' : '',
       action: () => { setAccountFrozenState(account.id, !account.frozen).catch(console.error); },
-    }] : []),
+    },
     { divider: true },
     { label: 'Управление', icon: CM_ICON.settings, action: () => openAccountMenu(account.id) },
     { divider: true },

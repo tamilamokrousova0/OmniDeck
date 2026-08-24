@@ -82,7 +82,7 @@ async function init() {
 
   const moduleCtx = { state, els, setStatus, trimMapSize, runWithBusyButton };
   WaDeckWeatherModule.init(moduleCtx);
-  window.WaDeckNotifications?.init?.(moduleCtx);
+  window.WaDeckNotifications?.init?.({ ...moduleCtx, setActiveAccount });
   window.WaDeckGlobalSearch?.init?.({ ...moduleCtx, isWebviewReady, safeExecuteInWebview });
   WaDeckAutoUpdateModule.init(moduleCtx);
   WaDeckUnreadModule.init({ ...moduleCtx, renderAccounts, isWebviewReady, safeExecuteInWebview, updateHubDashboard });

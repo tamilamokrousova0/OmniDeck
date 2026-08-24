@@ -60,7 +60,7 @@ function openAccountMenu(accountId) {
     const label = els.accountMenuFreeze.querySelector('.toggle-text');
     if (label) label.textContent = frozen ? 'Разморозить' : 'Заморозить';
     els.accountMenuFreeze.title = frozen
-      ? 'Разморозить и возобновить загрузку WhatsApp'
+      ? 'Разморозить и возобновить загрузку аккаунта'
       : 'Заморозить аккаунт (выгрузить webview)';
   }
 
@@ -135,9 +135,9 @@ function openAccountMenu(accountId) {
     }
   }
 
-  // Hide freeze for Telegram
+  // Заморозка доступна обоим типам аккаунтов
   if (els.accountMenuFreeze) {
-    els.accountMenuFreeze.style.display = account.type === 'telegram' ? 'none' : '';
+    els.accountMenuFreeze.style.display = '';
   }
 
   els.accountMenuModal.classList.remove('hidden');
