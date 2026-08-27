@@ -49,9 +49,24 @@ const IS_WIN = process.platform === 'win32';
 const needsShell = (bin) => IS_WIN && /\.(bat|cmd)$/i.test(String(bin || ''));
 const cliCmd = (bin) => (needsShell(bin) ? `"${bin}"` : bin);
 
+/* Нативная сборка signal-cli (GraalVM native-image — именно её отдаёт brew)
+   не умеет вложения-картинки: в образе нет нативных библиотек AWT, и отправка
+   фото падает с «Can't load library: awt (UnsatisfiedLinkError)», хотя текст
+   и txt уходят нормально. Java-дистрибутив отличается тем, что рядом с bin/
+   лежит lib/ с jar-ами; нативная сборка — один большой бинарь.
+   Такой signal-cli мы не берём: дека поставит свой полный рантайм. */
+function isJavaDistribution(bin) {
+  try {
+    const lib = path.join(path.dirname(path.dirname(bin)), 'lib');
+    return fsSync.readdirSync(lib).some((f) => f.endsWith('.jar'));
+  } catch {
+    return false;
+  }
+}
+
 function findSignalCli() {
   for (const p of CLI_CANDIDATES) {
-    try { if (fsSync.existsSync(p)) return p; } catch { /* ignore */ }
+    try { if (fsSync.existsSync(p) && isJavaDistribution(p)) return p; } catch { /* ignore */ }
   }
   try {
     // На Windows нет which — там where; берём первую строку вывода
@@ -59,7 +74,7 @@ function findSignalCli() {
       ? spawnSync('where', ['signal-cli'], { encoding: 'utf8', shell: true })
       : spawnSync('which', ['signal-cli'], { encoding: 'utf8' });
     const found = String(r.stdout || '').split(/\r?\n/)[0].trim();
-    if (r.status === 0 && found) return found;
+    if (r.status === 0 && found && isJavaDistribution(found)) return found;
   } catch { /* ignore */ }
   return null;
 }
@@ -493,6 +508,12 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userData
       params.quoteMessage = String(quote.text || '');
     }
     const res = await rpcRequest(accountId, 'send', params);
+    /* Подстраховка на случай, когда рантайм всё-таки оказался нативной сборкой
+       (её теперь отсеивает findSignalCli, но signal-cli могли подменить на
+       месте): вместо стектрейса про libawt показываем внятную причину. */
+    if (!res.ok && /Can't load library: awt|UnsatisfiedLinkError/i.test(String(res.error || ''))) {
+      return { ok: false, error: 'сборка signal-cli без поддержки картинок — переустановите Signal кнопкой в настройках' };
+    }
     if (res.ok) {
       // ts — ПРОТОКОЛЬНЫЙ timestamp из ответа signal-cli: именно по нему
       // приходят квитанции (галочки) и реакции собеседника
