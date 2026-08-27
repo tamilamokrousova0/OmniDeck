@@ -1,6 +1,6 @@
 /* Settings panel, theme/tiles, tweaks popover, clocks settings and the
    templates library. Extracted verbatim from renderer.js. */
-import { state, els } from './state.js';
+import { state, els, LITE } from './state.js';
 import { setStatus, showConfirm } from './helpers.js';
 import { selectedWebview } from './accounts.js';
 import { insertTextIntoActiveChat } from './webviews.js';
@@ -122,11 +122,13 @@ function refreshTweaksFabVisibility() {
   }
 }
 
+/* В лайте переводчика и CRM-подсказки нет вообще: гасим в одной точке, через
+   которую проходят все места внедрения скриптов в вебвью. */
 function isTranslatorEnabled() {
-  return state.settings?.translatorEnabled !== false;
+  return !LITE && state.settings?.translatorEnabled !== false;
 }
 function isCrmHoverEnabled() {
-  return state.settings?.crmHoverEnabled !== false;
+  return !LITE && state.settings?.crmHoverEnabled !== false;
 }
 function getHibernateMinutes() {
   const valid = [0, 30, 60, 120, 240];
@@ -546,6 +548,13 @@ function refreshSettingsMenuSubtitles() {
       return `${city} · ${unit === 'fahrenheit' ? '°F' : '°C'}`;
     },
     interface: () => {
+      /* В лайте переводчика и CRM-подсказки нет — подпись рассказывала бы про
+         настройки, которых в разделе не видно. */
+      if (LITE) {
+        const n = state.settings?.notificationsEnabled === false ? 'уведомления выкл' : 'уведомления вкл';
+        const h = getHibernateMinutes() ? `гибернация ${getHibernateMinutes()} мин` : 'гибернация выкл';
+        return `${n} · ${h}`;
+      }
       const t = isTranslatorEnabled() ? 'переводчик вкл' : 'переводчик выкл';
       const c = isCrmHoverEnabled() ? 'CRM hover вкл' : 'CRM hover выкл';
       return `${t} · ${c}`;
@@ -562,7 +571,9 @@ function refreshSettingsMenuSubtitles() {
 
   // "About" block: version / runtime info
   if (els.aboutAppVersion) {
-    els.aboutAppVersion.textContent = String(state.runtime?.appVersion || '—');
+    // Вторая подпись сборки (первая — в заголовке хаба): чтобы по скриншоту
+    // настроек было видно, лайт это или полная дека.
+    els.aboutAppVersion.textContent = `${String(state.runtime?.appVersion || '—')}${LITE ? ' Lite' : ''}`;
   }
   if (els.aboutElectronVersion) {
     els.aboutElectronVersion.textContent = String(state.runtime?.electron || '—');

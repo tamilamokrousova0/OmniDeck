@@ -4,6 +4,9 @@ dist
 # whisper-cli binaries land here in CI; dirs must exist for extraResources
 build/whisper/*/*
 !build/whisper/*/.gitkeep
+# llama-server собирается локально/в CI тем же способом
+build/llama/*/*
+!build/llama/*/.gitkeep
 .claude/
 .superpowers/
 docs/superpowers/
@@ -13,3 +16,6 @@ mockups/
 statics/
 storages/
 wa-warmer/
+
+# Примеры брифов — реальные записи про реальных людей, в публичный репозиторий не идут
+build/brief/

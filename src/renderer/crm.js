@@ -1,8 +1,14 @@
 import { activeChatContactScript } from './webview-scripts/active-chat-contact.js';
 
   let state, els, setStatus, activeAccount, selectedWebview;
+  /* В лайт-сборке модуль не инициализируется, но ядро всё равно дёргает часть
+     его функций напрямую (bindings, hotkeys). Без этого флага первый же такой
+     вызов падал на `els` = undefined и обрывал ВСЮ привязку событий после
+     себя: переставали работать «+», настройки и хаб. */
+  let _inited = false;
 
   function init(ctx) {
+    _inited = true;
     state = ctx.state;
     els = ctx.els;
     setStatus = ctx.setStatus;
@@ -16,6 +22,7 @@ import { activeChatContactScript } from './webview-scripts/active-chat-contact.j
   let _crmEditSnapshot = null;
 
   function setCrmEditable(editable) {
+    if (!_inited) return;
     const on = Boolean(editable);
     if (on && !state.crmEditable) {
       _crmEditSnapshot = {
@@ -80,6 +87,7 @@ import { activeChatContactScript } from './webview-scripts/active-chat-contact.j
   }
 
   async function openCrmModal() {
+    if (!_inited) return;
     const account = activeAccount();
     if (!account) {
       setStatus('Нет активного аккаунта');
@@ -170,6 +178,7 @@ import { activeChatContactScript } from './webview-scripts/active-chat-contact.j
   }
 
   function closeCrmModal() {
+    if (!_inited) return;
     // Автосохранение: закрытие драуэра (крестик/Esc/тоггл) с несохранённой
     // правкой тихо сохраняет её — набранная заметка больше не теряется.
     // «Отмена» не задета: cancelCrmEdit сначала откатывает поля к снапшоту,
@@ -271,6 +280,7 @@ import { activeChatContactScript } from './webview-scripts/active-chat-contact.j
   }
 
   function bindCrmAutoResize() {
+    if (!_inited) return;
     if (els.crmAbout) els.crmAbout.addEventListener('input', () => autoResizeCrmTextarea(els.crmAbout));
     if (els.crmMyInfo) els.crmMyInfo.addEventListener('input', () => autoResizeCrmTextarea(els.crmMyInfo));
   }

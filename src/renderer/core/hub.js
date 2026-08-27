@@ -1,6 +1,6 @@
 /* Hub dashboard: greeting, clocks, filters, account cards, hub actions and
    the toolbar clock tooltip. Extracted verbatim from renderer.js. */
-import { state, els } from './state.js';
+import { state, els, LITE } from './state.js';
 import { brandIconSvg } from './brand-icons.js';
 import { setActiveAccount, addAccount } from './accounts.js';
 import { openSettingsPanel, closeSettingsPanel } from './settings.js';
@@ -243,10 +243,10 @@ function updateHubGreeting() {
           phrase: HUB_MOTIVATION_PHRASES[Math.floor(Math.random() * HUB_MOTIVATION_PHRASES.length)],
         };
       }
-      titleEl.textContent = _hubMotivationCache.phrase;
+      titleEl.textContent = LITE ? `${_hubMotivationCache.phrase} · Lite` : _hubMotivationCache.phrase;
       titleEl.classList.add('hub-title--motivation');
     } else {
-      titleEl.textContent = 'OmniDeck';
+      titleEl.textContent = LITE ? 'OmniDeck Lite' : 'OmniDeck';
       titleEl.classList.remove('hub-title--motivation');
     }
   }
@@ -266,8 +266,20 @@ function updateHubFilters() {
 
 /* Вкладка «Аккаунты» показывает все аккаунты; фильтры непрочитанных/
    избранных/важных теперь живут в ленте (unread-feed), не в списке карточек. */
+/* Вкладки «Непрочитанные/Избранные/Важные» в лайте скрыты, но state общий с
+   обычной декой: если там был выбран такой фильтр, лайт открылся бы на
+   невидимой вкладке с пустым списком. */
+function normalizeHubFilterForLite() {
+  if (LITE && ['unread', 'favorites', 'important'].includes(state.hubFilter)) {
+    state.hubFilter = 'all';
+  }
+}
+
 function filteredHubAccounts() {
-  return state.accounts || [];
+  normalizeHubFilterForLite();
+  const all = state.accounts || [];
+  // Профиль общий с обычной декой, но клиента Signal в лайте нет.
+  return LITE ? all.filter((a) => a.type !== 'signal') : all;
 }
 
 async function updateHubDashboard() {
@@ -286,7 +298,10 @@ async function updateHubDashboard() {
   updateHubFilters();
 
   const countEl = document.getElementById('hub-accts-count');
-  if (countEl) countEl.textContent = state.accounts.length ? String(state.accounts.length) : '';
+  // Считаем по тому же списку, что и рисуем: иначе в лайте счётчик показывал 7
+  // при пяти карточках (два Signal-аккаунта скрыты).
+  const shownCount = filteredHubAccounts().length;
+  if (countEl) countEl.textContent = shownCount ? String(shownCount) : '';
 
   const container = document.getElementById('hub-dashboard');
   if (!container) return;
@@ -425,7 +440,8 @@ async function updateHubDashboard() {
   settingsBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
   settingsBtn.addEventListener('click', () => { if (state.panelHidden) openSettingsPanel(); else closeSettingsPanel(); });
 
-  actions.append(addWaBtn, addTgBtn, addSgBtn, settingsBtn);
+  if (LITE) actions.append(addWaBtn, addTgBtn, settingsBtn);
+  else actions.append(addWaBtn, addTgBtn, addSgBtn, settingsBtn);
   actionsHost.appendChild(actions);
 
 }

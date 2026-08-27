@@ -16,6 +16,7 @@ import './weather.js';
 import './auto-update.js';
 import './unread.js';
 import './crm.js';
+import './call-brief.js';
 import './favorites.js';
 import './important.js';
 import './notifications.js';

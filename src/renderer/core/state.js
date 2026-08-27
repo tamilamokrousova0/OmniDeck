@@ -61,6 +61,14 @@ const state = {
   hubPendingCount: 0,
 };
 
+/* Лайт-сборка. Флаг приходит из preload синхронно (additionalArguments),
+   поэтому класс на <body> вешается до первой отрисовки — надстройки не
+   успевают мигнуть. Что именно скрыто, смотри в styles.css по `body.is-lite`. */
+const LITE = Boolean(window.waDeck?.lite);
+if (LITE) document.body.classList.add('is-lite');
+/* Бриф показываем только когда в сборке есть llama-server. */
+if (!window.waDeck?.briefAvailable) document.body.classList.add('no-brief');
+
 const els = {
   appRoot: document.getElementById('app-root'),
   brandHub: document.getElementById('brand-hub'),
@@ -162,6 +170,11 @@ const els = {
   closeReleaseNotes: document.getElementById('close-release-notes'),
 
   crmModal: document.getElementById('crm-modal'),
+  callBriefModal: document.getElementById('call-brief-modal'),
+  callBriefHead: document.getElementById('call-brief-head'),
+  callBriefText: document.getElementById('call-brief-text'),
+  callBriefBtn: document.getElementById('call-brief-btn'),
+  callBriefClose: document.getElementById('call-brief-close'),
   crmContactName: document.getElementById('crm-contact-name'),
   crmAbout: document.getElementById('crm-about'),
   crmMyInfo: document.getElementById('crm-my-info'),
@@ -201,4 +214,4 @@ const els = {
   crmImpToggle: document.getElementById('crm-imp-toggle'),
 };
 
-export { WADECK_WV_TOKEN, encodeBase64Utf8, state, els };
+export { WADECK_WV_TOKEN, encodeBase64Utf8, state, els, LITE };

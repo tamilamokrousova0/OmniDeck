@@ -1,6 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+const IS_LITE = process.argv.includes('--omnideck-lite');
+const HAS_BRIEF = process.argv.includes('--omnideck-brief');
+
 contextBridge.exposeInMainWorld('waDeck', {
+  lite: IS_LITE,
+  briefAvailable: HAS_BRIEF,
   bootstrap: () => ipcRenderer.invoke('bootstrap'),
   addAccount: (type) => ipcRenderer.invoke('add-account', type),
   removeAccount: (accountId) => ipcRenderer.invoke('remove-account', accountId),
@@ -67,6 +72,13 @@ contextBridge.exposeInMainWorld('waDeck', {
   installDownloadedUpdate: () => ipcRenderer.invoke('install-downloaded-update'),
   openReleasesPage: () => ipcRenderer.invoke('open-releases-page'),
   translateText: (payload) => ipcRenderer.invoke('translate-text', payload),
+  callBrief: (payload) => ipcRenderer.invoke('call-brief', payload),
+  onCallBriefProgress: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload || {});
+    ipcRenderer.on('call-brief-progress', listener);
+    return () => ipcRenderer.removeListener('call-brief-progress', listener);
+  },
   templateUsed: (payload) => ipcRenderer.invoke('template-used', payload),
   cleanupCache: () => ipcRenderer.invoke('cleanup-cache'),
   onAutoUpdateStatus: (callback) => {

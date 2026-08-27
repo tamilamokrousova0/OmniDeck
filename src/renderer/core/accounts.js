@@ -1,7 +1,7 @@
 /* Accounts: sidebar rendering, active-account switching, add/remove,
    drag reorder, context menus and refresh actions.
    Extracted verbatim from renderer.js. */
-import { state, els } from './state.js';
+import { state, els , LITE } from './state.js';
 import { setStatus, showConfirm } from './helpers.js';
 import {
   ensureWebview,
@@ -172,7 +172,12 @@ function updateAccountCardStatus(accountId) {
 function renderAccounts() {
   const fragment = document.createDocumentFragment();
 
-  for (const account of state.accounts) {
+  /* Профиль общий с обычной декой, поэтому в сторе могут лежать Signal-аккаунты.
+     В лайте клиента Signal нет — не показываем их вовсе, но и не трогаем:
+     вернёшься в обычную сборку, они на месте. */
+  const visible = LITE ? state.accounts.filter((a) => a.type !== 'signal') : state.accounts;
+
+  for (const account of visible) {
     const card = document.createElement('div');
     const hibernatedCls = (state._hibernated && state._hibernated.has(account.id)) ? 'is-hibernated' : '';
     card.className = `account-item ${state.activeAccountId === account.id ? 'active' : ''} ${account.frozen ? 'frozen' : ''} ${hibernatedCls}`.trim();

@@ -10,6 +10,18 @@ const { pathToFileURL } = require('url');
 const os = require('os');
 const { transcribeVoiceAt, transcribeWavBase64, cleanupStaleModels, killWhisper } = require('./voice-transcribe');
 const { initSignal } = require('./signal');
+const { makeBrief, killBrief, briefAvailable } = require('./call-brief');
+
+/* Лайт-сборка: та же кодовая база, другой productName в electron-builder.
+   Отличается только тем, ЧТО запускается: надстройки (переводчик, CRM,
+   избранные, важные, ленты, планировщик, шаблоны, поиск, сплит, Signal,
+   расшифровка, бриф) не инициализируются вовсе. В dev включается через
+   OMNIDECK_LITE=1. */
+/* Детекция по пути к исполняемому файлу, а не по app.getName(): в собранном
+   приложении getName() отдаёт `name` из package.json («omnideck»), а не
+   productName из конфига сборки, и лайт запускался как полная дека. */
+const LITE = process.env.OMNIDECK_LITE === '1' || /lite/i.test(process.execPath);
+console.log(`[boot] сборка: ${LITE ? 'LITE (надстройки выключены)' : 'полная'}`);
 
 /*
  * Keep WhatsApp/Telegram webviews online while hidden.
@@ -107,12 +119,17 @@ async function isAttachmentPathAllowed(filePath) {
   }
 }
 
-const APP_ID = 'com.local.wadeck';
-const APP_TITLE = 'OmniDeck';
+const APP_ID = LITE ? 'com.local.wadeck.lite' : 'com.local.wadeck';
+const APP_TITLE = LITE ? 'OmniDeck Lite' : 'OmniDeck';
 // Ребрендинг WA Deck → OmniDeck (2026-08). Каталог данных ПРИКОЛОЧЕН к
 // историческому имени: смена app.name иначе увела бы userData в
 // ~/Library/Application Support/OmniDeck, и все сессии/стор «пропали» бы.
 // Переезд каталога — только осознанной миграцией, не побочкой ренейма.
+// Лайт делит каталог данных с обычной декой намеренно: аккаунты, сессии и
+// настройки одни на две сборки, перепривязывать по QR не нужно. Сессия при
+// этом ФИЗИЧЕСКИ одна — это не копия, которая разлогинивает оригинал.
+// Обратная сторона: Electron держит блокировку на каталоге, поэтому
+// одновременно работает только одна из сборок, вторая молча не откроется.
 app.setPath('userData', path.join(app.getPath('appData'), 'wa-deck'));
 const FALLBACK_CHROME_VERSION = '146.0.7680.188';
 const APP_ICON_PNG_PATH = path.join(__dirname, '..', 'assets', 'icon', 'omnideck-icon-512.png');
@@ -1952,6 +1969,15 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
       webviewTag: true,
+      // Флаг доезжает до preload синхронно: renderer должен знать про лайт
+      // ДО первой отрисовки, иначе надстройки успеют мигнуть на экране.
+      additionalArguments: [
+        ...(LITE ? ['--omnideck-lite'] : []),
+        /* Бриф звонка живёт только там, где рядом лежит llama-server: в CI он
+           не собирается, и в публичной сборке кнопка была бы мёртвой. Флаг
+           доезжает до renderer синхронно, поэтому кнопка не мигает. */
+        ...(briefAvailable() ? ['--omnideck-brief'] : []),
+      ],
     },
   });
 
@@ -1959,11 +1985,14 @@ function createWindow() {
 
   // Орфография в полях самой деки (CRM, шаблоны, планировщик). Webview-поля
   // обслуживает обработчик в setupWebviewGuards — сюда их события не доходят.
-  configureSpellchecker(mainWindow.webContents.session);
+  /* В лайте у самой деки не остаётся полей ввода (CRM, шаблоны, планировщик
+     вырезаны), поэтому словари для её окна не нужны. Проверку орфографии в
+     полях САМИХ мессенджеров это не трогает — они живут в сессиях вебвью. */
+  if (!LITE) configureSpellchecker(mainWindow.webContents.session);
   mainWindow.webContents.on('context-menu', (_event, params) => {
     if (!params?.isEditable) return;
     const template = [];
-    appendSpellcheckMenuItems(template, mainWindow.webContents, params);
+    if (!LITE) appendSpellcheckMenuItems(template, mainWindow.webContents, params);
     template.push(
       { role: 'cut', label: 'Вырезать' },
       { role: 'copy', label: 'Копировать' },
@@ -2936,6 +2965,12 @@ function setupAutoUpdater() {
     return;
   }
 
+  /* Разные каналы: обычная дека читает latest-mac.yml, лайт — lite-mac.yml.
+     Оба файла лежат в одном релизе и друг друга не видят, поэтому лайт не
+     может «обновиться» в полную сборку и наоборот. Канал прописан и в
+     app-update.yml внутри сборки, здесь — страховка на случай ручной правки. */
+  if (LITE) autoUpdater.channel = 'lite';
+
   autoUpdater.autoDownload = true;
   // Require explicit user confirmation before applying updates on quit.
   // The UI already shows an "Install and restart" prompt via the
@@ -3321,6 +3356,30 @@ function registerIpc() {
     // fire-and-forget: прогресс и результат рисуются плашкой у пузыря
     transcribeVoiceAt(contents, voiceId, mainWindow, payload?.kind === 'video' ? 'video' : 'voice');
     return { ok: true };
+  });
+
+  handle('call-brief', async (_event, payload) => {
+    const raw = Array.isArray(payload?.messages) ? payload.messages : [];
+    // Обрезаем на входе: renderer уже ограничивает, но IPC — граница доверия,
+    // а лишние сообщения молча вылезли бы за контекст модели.
+    const messages = raw.slice(-100).map((m) => ({
+      me: Boolean(m?.me),
+      text: clampString(String(m?.text || '').trim(), 600),
+      // без даты ломаются и «общаемся N дней», и отбор свежих двух дней
+      at: clampString(String(m?.at || '').trim(), 40),
+    })).filter((m) => m.text);
+    if (!messages.length) return { ok: false, error: 'нет сообщений' };
+    return makeBrief(messages, {
+      contactName: clampString(String(payload?.contactName || '').trim(), LIMITS.CHAT_NAME),
+      crmAbout: clampString(String(payload?.crmAbout || '').trim(), 4000),
+      crmMine: clampString(String(payload?.crmMine || '').trim(), 4000),
+      parentWindow: mainWindow,
+      onProgress: (info) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('call-brief-progress', info);
+        }
+      },
+    });
   });
 
   handle('schedule-message', async (_event, payload) => {
@@ -4198,7 +4257,7 @@ async function bootstrap() {
     _dialogPickedPaths.add(String(rp));
   }
   setupWebviewGuards();
-  signalService = initSignal({
+  signalService = LITE ? null : initSignal({
     getMainWindow: () => mainWindow,
     getAccounts: () => state.store.accounts,
     saveStore,
@@ -4207,7 +4266,7 @@ async function bootstrap() {
   });
   registerIpc();
   createWindow();
-  signalService.ensureDaemons();
+  signalService?.ensureDaemons();
 
   /* GPU / utility process death. The GPU process is shared by the whole app;
      after a long session (many always-hot webview compositor layers exhaust GPU
@@ -4269,14 +4328,14 @@ if (addSingleInstanceGuard()) {
   /* Flush pending store writes before exit */
   // SIGTERM/SIGINT (pkill, Ctrl+C) убивали Electron мимо before-quit —
   // signal-cli-демоны оставались сиротами и съедали входящие у нового запуска
-  process.on('SIGTERM', () => { try { signalService?.stopAll(); killWhisper(); } catch { /* ignore */ } app.quit(); });
-  process.on('SIGINT', () => { try { signalService?.stopAll(); killWhisper(); } catch { /* ignore */ } app.quit(); });
+  process.on('SIGTERM', () => { try { signalService?.stopAll(); killWhisper(); killBrief(); } catch { /* ignore */ } app.quit(); });
+  process.on('SIGINT', () => { try { signalService?.stopAll(); killWhisper(); killBrief(); } catch { /* ignore */ } app.quit(); });
 
   app.on('before-quit', async (event) => {
     if (_appIsQuitting) return;
     _appIsQuitting = true;
     event.preventDefault();
-    try { signalService?.stopAll(); killWhisper(); } catch { /* ignore */ }
+    try { signalService?.stopAll(); killWhisper(); killBrief(); } catch { /* ignore */ }
     try {
       // Bounded wait: a wedged disk write (stalled network volume, hung
       // fsync) must not make the app unquittable.

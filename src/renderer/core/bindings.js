@@ -61,6 +61,7 @@ import { templateController } from './init.js';
 import { WaDeckWeatherModule } from '../weather.js';
 import { WaDeckAutoUpdateModule } from '../auto-update.js';
 import { WaDeckCrmModule } from '../crm.js';
+import { WaDeckCallBriefModule } from '../call-brief.js';
 import { WaDeckScheduleModule } from '../schedule.js';
 
 function bindActions() {
@@ -427,6 +428,8 @@ function bindActions() {
   els.crmSave?.addEventListener('click', () => WaDeckCrmModule.saveCrmCard().catch(console.error));
   els.crmCopy?.addEventListener('click', () => WaDeckCrmModule.copyCrmCard().catch(console.error));
   els.crmClose?.addEventListener('click', WaDeckCrmModule.closeCrmModal);
+  els.callBriefBtn?.addEventListener('click', () => WaDeckCallBriefModule.openCallBrief().catch(console.error));
+  els.callBriefClose?.addEventListener('click', WaDeckCallBriefModule.closeCallBrief);
   if (els.crmAddNote) els.crmAddNote.addEventListener('click', WaDeckCrmModule.addCrmNote);
   WaDeckCrmModule.bindCrmAutoResize();
   // Confirm модал

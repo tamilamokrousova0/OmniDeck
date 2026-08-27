@@ -7188,3 +7188,45 @@ html[data-theme='light'] .huf-row:hover {
   color: var(--text-strong);
 }
 .split-start-field input:focus { box-shadow: none; }
+
+/* Бриф звонка: моноширинного не нужно, но переносы и абзацы модели важны */
+.call-brief-text {
+  margin: 0;
+  padding: 12px 14px;
+  max-height: 55vh;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  user-select: text;
+}
+
+/* ─── Лайт-сборка ───────────────────────────────────────────────────────────
+   Класс вешается в state.js по флагу из preload, до первой отрисовки.
+   Модули надстроек в лайте не инициализируются (см. core/init.js) — здесь
+   только прячем их точки входа, чтобы не оставалось мёртвых кнопок. */
+body.is-lite #open-crm-modal,
+body.is-lite #open-template-quick,
+body.is-lite #open-schedule-toolbar,
+body.is-lite .schedule-widget,
+body.is-lite #send-voice-msg,
+body.is-lite #call-brief-btn,
+body.no-brief #call-brief-btn,
+body.is-lite #toggle-split,
+body.is-lite .zoom-control,
+body.is-lite #pin-feed,
+body.is-lite .hub-unread-feed,
+body.is-lite #hub-tab-favorites,
+body.is-lite #hub-tab-important,
+body.is-lite #hub-tab-unread,
+body.is-lite .add-account-option[data-type="signal"],
+body.is-lite .toggle-row:has(#setting-translator-enabled),
+body.is-lite .toggle-row:has(#setting-batch-translate),
+body.is-lite .toggle-row:has(#setting-crm-hover-enabled),
+/* Разделы настроек вырезанных функций: шаблоны и планировщик */
+body.is-lite .settings-menu-item[data-open="templates"],
+body.is-lite .settings-menu-item[data-open="schedule"] {
+  display: none !important;
+}

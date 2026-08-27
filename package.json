@@ -1,6 +1,6 @@
 {
   "name": "omnideck",
-  "version": "0.10.4",
+  "version": "0.10.5",
   "description": "OmniDeck: multi-account WhatsApp / Telegram / Signal deck",
   "main": "src/main.js",
   "scripts": {
@@ -11,7 +11,10 @@
     "dist:mac": "npm run build:renderer && electron-builder --mac dmg zip --arm64",
     "dist:win": "npm run build:renderer && electron-builder --win nsis portable --x64",
     "dist:all": "npm run dist:mac && npm run dist:win",
-    "dist": "npm run dist:mac && npm run dist:win"
+    "dist": "npm run dist:mac && npm run dist:win",
+    "dist:mac:lite": "npm run build:renderer && node build/lite-config.js mac && electron-builder --mac dmg zip --arm64 --publish never --config dist/.lite-build.json",
+    "dev:lite": "OMNIDECK_LITE=1 npm run dev",
+    "dist:win:lite": "npm run build:renderer && node build/lite-config.js win && electron-builder --win nsis --x64 --publish never --config dist/.lite-build.json"
   },
   "keywords": [],
   "author": "",
@@ -45,6 +48,14 @@
         {
           "from": "build/whisper/mac",
           "to": "whisper"
+        },
+        {
+          "from": "build/llama/mac",
+          "to": "llama"
+        },
+        {
+          "from": "build/brief",
+          "to": "brief"
         }
       ],
       "artifactName": "OmniDeck-${version}-${arch}.${ext}",

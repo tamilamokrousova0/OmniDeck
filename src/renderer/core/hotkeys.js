@@ -84,6 +84,11 @@ function handleEscapeUiReset() {
     if (typeof window._hideTemplateEditForm === 'function') window._hideTemplateEditForm();
     return true;
   }
+  // 7.5 Бриф звонка
+  if (isOpen(els.callBriefModal)) {
+    window.WaDeckCallBriefModule?.closeCallBrief();
+    return true;
+  }
   // 8. CRM modal
   if (isOpen(els.crmModal)) {
     WaDeckCrmModule.closeCrmModal();

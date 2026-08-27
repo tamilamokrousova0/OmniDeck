@@ -1,7 +1,7 @@
 /* Webview lifecycle: creation/cleanup, readiness, safe script execution,
    guest-message dispatch, zoom, hibernation, translator/CRM-hover toggles,
    chat text insertion and voice messages. Extracted verbatim from renderer.js. */
-import { state, els, WADECK_WV_TOKEN } from './state.js';
+import { state, els, WADECK_WV_TOKEN, LITE } from './state.js';
 import {
   setStatus,
   showToast,
@@ -276,11 +276,11 @@ function ensureWebview(account) {
       webview.executeJavaScript(translatorBarScript(WADECK_WV_TOKEN), true)
         .catch((e) => console.warn('[translator-reload]', e));
     }
-    if (isWhatsApp && typeof slashTemplatesScript === 'function') {
+    if (isWhatsApp && !LITE && typeof slashTemplatesScript === 'function') {
       webview.executeJavaScript(slashTemplatesScript(WADECK_WV_TOKEN), true)
         .catch((e) => console.warn('[slash-templates-reload]', e));
     }
-    if (isWhatsApp && typeof voiceTranscribeButtonsScript === 'function') {
+    if (isWhatsApp && !LITE && typeof voiceTranscribeButtonsScript === 'function') {
       webview.executeJavaScript(voiceTranscribeButtonsScript(WADECK_WV_TOKEN), true)
         .catch((e) => console.warn('[voice-buttons-reload]', e));
     }
@@ -353,9 +353,13 @@ function ensureWebview(account) {
         webview.setUserAgent(state.runtime.waUserAgent);
       }
 
-      webview
-        .executeJavaScript(bridgeScript(WADECK_WV_TOKEN), true)
-        .catch((e) => console.warn('[bridge]', e));
+      // Мост-экстрактор текста нужен переводчику, CRM-подсказке и брифу —
+      // в лайте их нет, и лишний скрипт в чужой DOM не лезет.
+      if (!LITE) {
+        webview
+          .executeJavaScript(bridgeScript(WADECK_WV_TOKEN), true)
+          .catch((e) => console.warn('[bridge]', e));
+      }
 
       if (isCrmHoverEnabled() && typeof crmHoverBridgeScript === 'function') {
         webview.executeJavaScript(crmHoverBridgeScript(WADECK_WV_TOKEN), true).catch((e) => console.warn('[crm-hover]', e));
@@ -363,10 +367,10 @@ function ensureWebview(account) {
       if (isTranslatorEnabled() && typeof translatorBarScript === 'function') {
         webview.executeJavaScript(translatorBarScript(WADECK_WV_TOKEN), true).catch((e) => console.warn('[translator]', e));
       }
-      if (typeof slashTemplatesScript === 'function') {
+      if (!LITE && typeof slashTemplatesScript === 'function') {
         webview.executeJavaScript(slashTemplatesScript(WADECK_WV_TOKEN), true).catch((e) => console.warn('[slash-templates]', e));
       }
-      if (typeof voiceTranscribeButtonsScript === 'function') {
+      if (!LITE && typeof voiceTranscribeButtonsScript === 'function') {
         webview.executeJavaScript(voiceTranscribeButtonsScript(WADECK_WV_TOKEN), true).catch((e) => console.warn('[voice-buttons]', e));
       }
     }

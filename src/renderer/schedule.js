@@ -6,7 +6,10 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
   let accountById, ensureWebview, isWebviewReady, sendWebviewInput, delay;
   let formatDateTime, nextSendAtLocal, showConfirm, applyTemplateVariables;
 
+  let _inited = false;
+
   function init(ctx) {
+    _inited = true;
     state = ctx.state;
     els = ctx.els;
     setStatus = ctx.setStatus;
@@ -40,12 +43,14 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
   }
 
   function cancelScheduleEditMode() {
+    if (!_inited) return;
     if (!state) return;
     state._editingScheduleId = null;
     setScheduleEditBannerVisible(false);
   }
 
   function renderScheduleTarget() {
+    if (!_inited) return; // лайт-сборка: планировщика нет
     if (!state.scheduleTarget.accountId || !state.scheduleTarget.chatName) {
       els.scheduleTarget.value = '';
       return;
@@ -242,6 +247,7 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
   let _renderScheduledGen = 0;
 
   async function renderScheduled() {
+    if (!_inited) return; // лайт-сборка: планировщика нет
     const gen = ++_renderScheduledGen;
     const response = await window.waDeck.listScheduled({ limit: 2000 });
     if (gen !== _renderScheduledGen) return; // a newer render is in flight
