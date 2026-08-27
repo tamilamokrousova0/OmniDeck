@@ -20,7 +20,8 @@ import qrcode from 'qrcode-generator';
 let state = null;
 let setActiveAccount = null;
 
-const _statuses = new Map(); // accountId → status string
+const _statuses = new Map();
+const _statusErr = new Map(); // accountId → последняя ошибка signal-cli // accountId → status string
 let _linkUri = '';           // текущий URI линковки (одна за раз)
 let _linkAccountId = '';
 let _visibleAccountId = '';
@@ -555,6 +556,14 @@ function render() {
   statusLine.textContent = meta.sub;
   card.appendChild(statusLine);
 
+  const err = _statusErr.get(account.id);
+  if (err && status !== 'running') {
+    const errLine = document.createElement('div');
+    errLine.className = 'signal-card-err';
+    errLine.textContent = err.length > 300 ? `${err.slice(0, 300)}…` : err;
+    card.appendChild(errLine);
+  }
+
   if (showQr) {
     const img = document.createElement('img');
     img.className = 'signal-qr';
@@ -621,7 +630,7 @@ function render() {
 
   const e2e = document.createElement('div');
   e2e.className = 'signal-card-e2e';
-  e2e.textContent = '\u{1F512} Сквозное шифрование: сообщения расшифровываются локально и хранятся только на этом Mac.';
+  e2e.textContent = '\u{1F512} Сквозное шифрование: сообщения расшифровываются локально и хранятся только на этом устройстве.';
   card.appendChild(e2e);
 
   panel.appendChild(card);
@@ -1476,6 +1485,10 @@ function handleEvent(payload) {
     _linkUri = '';
   } else if (kind === 'status') {
     _statuses.set(accountId, String(payload.status || ''));
+    // Ошибку signal-cli раньше просто теряли: снаружи это выглядело как
+    // «нажал и ничего не произошло»
+    if (payload.error) _statusErr.set(accountId, String(payload.error));
+    else _statusErr.delete(accountId);
     // Чистим QR только по событию СВОЕГО аккаунта — статус соседнего
     // signal-аккаунта обрывал линковку на середине
     if (payload.status !== 'linking' && accountId === _linkAccountId) { _linkUri = ''; }

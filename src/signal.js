@@ -67,29 +67,50 @@ function findSignalCli() {
 // brew-обёртка signal-cli сама найдёт java, но PATH GUI-процесса macOS не
 // содержит /opt/homebrew/bin — добавляем явно. javaHome непустой, когда деке
 // пришлось принести собственную Java: launcher signal-cli читает JAVA_HOME.
-const spawnEnv = (javaHome) => ({
-  ...process.env,
-  PATH: `${process.env.PATH || ''}:/opt/homebrew/bin:/usr/local/bin`,
-  ...(javaHome ? { JAVA_HOME: javaHome } : {}),
-});
+const spawnEnv = (javaHome) => {
+  const env = { ...process.env };
+  // Только POSIX: на Windows разделитель ';', и такая склейка ломала
+  // последний элемент PATH, приписывая к нему мусор
+  if (!IS_WIN) env.PATH = `${process.env.PATH || ''}:/opt/homebrew/bin:/usr/local/bin`;
+  if (javaHome) env.JAVA_HOME = javaHome;
+  return env;
+};
 
 function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userDataPath }) {
   // Ленивое разрешение: signal-cli могли установить УЖЕ ПОСЛЕ старта деки —
   // при null перепроверяем на каждом обращении, без перезапуска приложения.
   let _cliPath = null;
   let _javaHome = '';
+  let _launch = null;
   /* Свой рантайм в userData приоритетнее системного: его версию мы знаем
      и проверили по хешу, а системный signal-cli мог остаться старым. */
   const resolveCli = () => {
     const own = userDataPath ? provisioner.provisioned(userDataPath) : null;
-    if (own) { _javaHome = own.javaHome; return own.bin; }
+    if (own) {
+      _javaHome = own.javaHome;
+      _launch = provisioner.launchSpec(userDataPath);
+      return own.bin;
+    }
     _javaHome = '';
+    _launch = null;
     return findSignalCli();
   };
   _cliPath = resolveCli();
   const cli = () => {
     if (!_cliPath) _cliPath = resolveCli();
     return _cliPath;
+  };
+  /* Единая точка запуска: свой рантайм зовём java напрямую (см. launchSpec —
+     штатный launcher на Windows упирается в лимит длины команды), системный
+     signal-cli — его собственным скриптом. */
+  const spawnCli = (args, opts = {}) => {
+    if (!cli()) return null;
+    // windowsHide: java — консольное приложение, иначе на каждый запуск
+    // выскакивает чёрное окно консоли поверх деки
+    const base = { windowsHide: true, ...opts };
+    if (_launch) return spawn(_launch.cmd, [..._launch.prefix, ...args], { env: spawnEnv(''), ...base });
+    const bin = cli();
+    return spawn(cliCmd(bin), args, { env: spawnEnv(_javaHome), shell: needsShell(bin), ...base });
   };
   /* Локальная история сообщений (аналог базы Signal Desktop, но плоский
      JSON): без неё лента обнулялась при каждом перезапуске деки. Кап 300
@@ -244,7 +265,7 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userData
   function listLinkedNumbers() {
     return new Promise((resolve) => {
       if (!cli()) { resolve([]); return; }
-      const proc = spawn(cliCmd(cli()), ['listAccounts'], { env: spawnEnv(_javaHome), shell: needsShell(cli()) });
+      const proc = spawnCli(['listAccounts']);
       let out = '';
       const timer = setTimeout(() => { try { proc.kill(); } catch { /* ignore */ } }, 30000);
       proc.stdout.on('data', (d) => { out += String(d); });
@@ -351,29 +372,24 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userData
     // там демоны-сироты гасим по имени процесса.
     try {
       if (IS_WIN) {
-        /* taskkill /IM бьёт по ИМЕНИ процесса — то есть по всем signal-cli
-           сразу. При двух и более аккаунтах старт одного убивал демоны
-           соседей и начинался взаимный kill-цикл. Чистим сирот только когда
-           своих живых демонов нет (значит это первый старт в сессии). */
-        if (daemons.size === 0) spawnSync('taskkill', ['/F', '/IM', 'signal-cli.exe'], { shell: true });
+        /* По имени процесса бить нельзя: наш демон — обычный java.exe, и
+           taskkill /IM снёс бы любые чужие Java-приложения. Отбираем по
+           командной строке: только наш main-класс и только этот номер. */
+        const digits = account.signalNumber.replace(/[^0-9]/g, '');
+        spawnSync('powershell', ['-NoProfile', '-Command',
+          `Get-CimInstance Win32_Process -Filter "Name='java.exe'" | `
+          + `Where-Object { $_.CommandLine -like '*org.asamk.signal.Main*${digits}*' } | `
+          + 'ForEach-Object { Stop-Process -Id $_.ProcessId -Force }',
+        ], { windowsHide: true, timeout: 10000 });
       } else {
         spawnSync('pkill', ['-f', `signal-cli.*[+]${account.signalNumber.replace(/[^0-9]/g, '')}`]);
       }
     } catch { /* ignore */ }
 
-    // detached: signal-cli — shell-обёртка над java; убийство одной обёртки
-    // оставляло java-сироту. Своя process group → kill(-pid) убивает дерево.
-    const bin = cli();
-    const proc = spawn(
-      cliCmd(bin),
+    // detached: своя process group → kill(-pid) убивает дерево целиком
+    const proc = spawnCli(
       ['-a', account.signalNumber, 'jsonRpc'],
-      {
-        env: spawnEnv(_javaHome),
-        stdio: ['pipe', 'pipe', 'pipe'],
-        detached: !IS_WIN,
-        // На Windows signal-cli — .bat-обёртка над Java: без shell spawn падает
-        shell: needsShell(bin),
-      },
+      { stdio: ['pipe', 'pipe', 'pipe'], detached: !IS_WIN },
     );
     const entry = { proc, deliberate: false, nextId: 1, pending: new Map() };
     daemons.set(accountId, entry);
@@ -592,13 +608,13 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userData
     return { ok: true };
   }
 
-  function cancelLink() {
+  function cancelLink(reason) {
     if (!linkJob) return;
     clearTimeout(linkJob.timer);
     killTree(linkJob.proc);
     const { accountId } = linkJob;
     linkJob = null;
-    setStatus(accountId, 'unlinked');
+    setStatus(accountId, 'unlinked', reason ? { error: reason } : {});
   }
 
   function startLink(accountId) {
@@ -606,10 +622,14 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userData
     const account = accountById(accountId);
     if (!account) return { ok: false, error: 'account_not_found' };
     if (linkJob) cancelLink(); // новая линковка отменяет предыдущую
+    let stderrTail = '';
 
-    const proc = spawn(cliCmd(cli()), ['link', '-n', 'OmniDeck'], { env: spawnEnv(_javaHome), stdio: ['ignore', 'pipe', 'pipe'], detached: !IS_WIN, shell: needsShell(cli()) });
+    const proc = spawnCli(['link', '-n', 'OmniDeck'], { stdio: ['ignore', 'pipe', 'pipe'], detached: !IS_WIN });
+    if (!proc) { setStatus(accountId, 'no_cli'); return { ok: false, error: 'no_cli' }; }
     const timer = setTimeout(() => {
-      if (linkJob?.proc === proc) cancelLink();
+      if (linkJob?.proc !== proc) return;
+      const why = stderrTail.trim().slice(-200);
+      cancelLink(why || 'signal-cli не отдал QR-код за 3 минуты');
     }, LINK_TIMEOUT_MS);
     linkJob = { accountId, proc, timer };
     setStatus(accountId, 'linking');
@@ -622,9 +642,15 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userData
         emit({ kind: 'link-uri', accountId, uri });
       }
     });
-    let stderrTail = '';
     proc.stderr.on('data', (chunk) => { stderrTail = (stderrTail + String(chunk)).slice(-500); });
-    proc.on('error', () => { /* exit-обработчик покроет */ });
+    proc.on('error', (e) => {
+      // При сбое самого запуска 'exit' не приходит — без этого линковка
+      // просто висела бы до таймаута молча
+      if (linkJob?.proc !== proc) return;
+      clearTimeout(linkJob.timer);
+      linkJob = null;
+      setStatus(accountId, 'unlinked', { error: `Не удалось запустить signal-cli: ${e?.message || e}` });
+    });
     proc.on('exit', async (code) => {
       if (linkJob?.proc !== proc) return; // отменена/заменена
       clearTimeout(linkJob.timer);

@@ -257,4 +257,28 @@ function downloadSizeMb() {
   return Math.round((CLI.size + jre) / 1048576);
 }
 
-module.exports = { provision, provisioned, cliBinPath, downloadSizeMb, systemJavaHome, CLI_VERSION: CLI.version };
+/* Как запускать наш signal-cli. НЕ через bin/signal-cli(.bat): тот скрипт
+   перечисляет все 74 jar-а по одному, и на Windows развёрнутая команда упирается
+   в лимит cmd.exe (8191 символа) — при чуть более длинном имени пользователя она
+   просто обрезается, и запуск молча не происходит. Зовём java напрямую с
+   classpath-маской lib/*: её разворачивает сама Java, команда остаётся короткой,
+   а заодно исчезают пляски с .bat, оболочкой и кавычками.
+   --enable-native-access=ALL-UNNAMED — из штатного launcher-а: без него Java 25
+   ругается на нативные вызовы libsignal. */
+function launchSpec(userData) {
+  const p = provisioned(userData);
+  if (!p) return null;
+  const java = p.javaHome
+    ? path.join(p.javaHome, 'bin', IS_WIN ? 'java.exe' : 'java')
+    : (IS_WIN ? 'java.exe' : 'java');
+  return {
+    cmd: java,
+    prefix: [
+      '--enable-native-access=ALL-UNNAMED',
+      '-classpath', path.join(cliDir(userData), 'lib', '*'),
+      'org.asamk.signal.Main',
+    ],
+  };
+}
+
+module.exports = { provision, provisioned, launchSpec, cliBinPath, downloadSizeMb, systemJavaHome, CLI_VERSION: CLI.version };
