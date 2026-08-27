@@ -218,6 +218,19 @@ function voiceCaptureScript(voiceId, kind) {
        глушим на всякий случай оба типа медиа. decodeAudioData Chromium
        сам демуксит mp4 и берёт аудио-дорожку — конвейер ниже общий. */
     const audios = () => Array.from(document.querySelectorAll(IS_VIDEO ? 'audio, video' : 'audio'));
+    /* Если клик по пузырю всё-таки распахнул просмотрщик медиа (кнопки play
+       у видео может не быть — тогда жмётся сама превьюшка), закрываем его:
+       человек просил расшифровку, а не галерею. */
+    const closeMediaViewer = () => {
+      try {
+        const viewer = document.querySelector('[data-animate-modal-body="true"], [data-testid="media-viewer"]');
+        if (!viewer) return;
+        const x = viewer.querySelector('span[data-icon="x"], span[data-icon="x-alt"], [aria-label="Закрыть"], [aria-label="Close"]');
+        const btn = x && (x.closest('button') || x.closest('[role="button"]') || x);
+        if (btn) { btn.click(); return; }
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
+      } catch (_) { /* не закрылся — не критично */ }
+    };
     const capTag = IS_VIDEO ? 'VIDEO' : 'AUDIO';
     const mutedByUs = [];
     const proto = HTMLMediaElement.prototype;
@@ -234,42 +247,65 @@ function voiceCaptureScript(voiceId, kind) {
         src = rowAudio.src; // уже проигрывалось — источник на месте, play не нужен
       }
 
-      /* Прямой путь: полный ключ медиа лежит в локальной базе WhatsApp
-         (model-storage → store «message», ключи вида
-         false_<чат>@lid_<сообщение>). Берём его по id сообщения из разметки
-         и скачиваем файл у сервис-воркера — ничего не открывается и не
-         играет. Не вышло — ниже прежний путь с кликом по play. */
+      /* Прямой путь: ключ медиа у сервис-воркера имеет вид
+         <от_меня>_<чат>_<сообщение>. В разметке лежит только короткий id
+         сообщения, полный ключ — в локальной базе (model-storage → store
+         «message»). Но база кеширует лишь недавнее (сотни записей), и для
+         видео постарше ключа там нет — тогда собираем его сами: чат берём
+         из ключей соседних сообщений этой же переписки, оба префикса
+         (true/false) проверяем запросом. Ничего не открывается и не играет.
+         Совсем не вышло — ниже прежний путь с кликом по play. */
       if (IS_VIDEO && !src) {
         try {
           const idEl = row.querySelector('[data-id]');
           const msgId = idEl && idEl.getAttribute('data-id');
           if (msgId) {
-            const fullKey = await new Promise((resolve) => {
+            const keys = await new Promise((resolve) => {
               let done = false;
               const fin = (v) => { if (!done) { done = true; resolve(v); } };
-              setTimeout(() => fin(''), 2500); // база молчит — не ждём
+              setTimeout(() => fin([]), 4000); // база молчит — не ждём
               try {
                 const req = indexedDB.open('model-storage');
-                req.onerror = () => fin('');
+                req.onerror = () => fin([]);
                 req.onsuccess = () => {
                   const db = req.result;
-                  if (!db.objectStoreNames.contains('message')) { db.close(); return fin(''); }
+                  if (!db.objectStoreNames.contains('message')) { db.close(); return fin([]); }
                   const st = db.transaction('message', 'readonly').objectStore('message');
                   const q = st.getAllKeys();
-                  q.onsuccess = () => {
-                    const suffix = '_' + msgId;
-                    const hit = (q.result || []).map(String).find((k) => k.endsWith(suffix));
-                    db.close();
-                    fin(hit || '');
-                  };
-                  q.onerror = () => { db.close(); fin(''); };
+                  q.onsuccess = () => { const r = (q.result || []).map(String); db.close(); fin(r); };
+                  q.onerror = () => { db.close(); fin([]); };
                 };
-              } catch (_) { fin(''); }
+              } catch (_) { fin([]); }
             });
-            if (fullKey) {
-              const direct = 'https://web.whatsapp.com/stream/video?key=' + fullKey;
-              const probe = await fetch(direct, { headers: { Range: 'bytes=0-1023' } });
-              if (probe.status === 206 || probe.ok) src = direct;
+
+            const tailId = (k) => k.slice(k.lastIndexOf('_') + 1);
+            const chatOf = (k) => { const m = k.match(/^(?:true|false)_(.+)_[^_]+$/); return m ? m[1] : ''; };
+            const candidates = [];
+            const exact = keys.find((k) => tailId(k) === msgId);
+            if (exact) candidates.push(exact);
+            /* Чат определяем по сообщениям, которые сейчас на экране: их
+               короткие id есть и в разметке, и в ключах базы. */
+            const onScreen = new Set(Array.from(document.querySelectorAll('[data-id]'))
+              .map((e) => e.getAttribute('data-id')).filter(Boolean));
+            const chats = [];
+            for (const k of keys) {
+              if (!onScreen.has(tailId(k))) continue;
+              const chat = chatOf(k);
+              if (chat && chats.indexOf(chat) === -1) chats.push(chat);
+            }
+            const outgoing = Boolean(row.closest('.message-out'));
+            for (const chat of chats.slice(0, 3)) {
+              // своё сообщение вероятнее с префиксом true — его и пробуем первым
+              for (const pref of (outgoing ? ['true', 'false'] : ['false', 'true'])) {
+                const k = pref + '_' + chat + '_' + msgId;
+                if (candidates.indexOf(k) === -1) candidates.push(k);
+              }
+            }
+
+            for (const key of candidates.slice(0, 8)) {
+              const direct = 'https://web.whatsapp.com/stream/video?key=' + key;
+              const probe = await fetch(direct, { headers: { Range: 'bytes=0-1023' } }).catch(() => null);
+              if (probe && (probe.status === 206 || probe.ok)) { src = direct; break; }
             }
           }
         } catch (_) { /* ключ не нашёлся — обычный путь ниже */ }
@@ -348,6 +384,7 @@ function voiceCaptureScript(voiceId, kind) {
           const pauseBtn = pauseIcon && (pauseIcon.closest('button') || pauseIcon.closest('[role="button"]'));
           if (pauseBtn) pauseBtn.click();
         } catch (_) {}
+        closeMediaViewer();
         if (!src) return { ok: false, error: 'blob_not_found' };
       }
 
@@ -507,6 +544,7 @@ function voiceCaptureScript(voiceId, kind) {
           const btn2 = again && (again.closest('button') || again.closest('[role="button"]'));
           if (btn2) btn2.click();
         } catch (_) {}
+        closeMediaViewer();
       }
       /* Сначала пауза, потом размьют — иначе элемент, который мы замьютили,
          но не остановили, начинает звучать на всё время работы whisper */

@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('waDeck', {
   signalLinkStart: (payload) => ipcRenderer.invoke('signal-link-start', payload),
   signalLinkCancel: () => ipcRenderer.invoke('signal-link-cancel'),
   signalInstallCli: (payload) => ipcRenderer.invoke('signal-install-cli', payload),
+  signalInstallCancel: () => ipcRenderer.invoke('signal-install-cancel'),
   signalGetStatus: () => ipcRenderer.invoke('signal-get-status'),
   signalSend: (payload) => ipcRenderer.invoke('signal-send', payload),
   signalLoadMessages: () => ipcRenderer.invoke('signal-load-messages'),

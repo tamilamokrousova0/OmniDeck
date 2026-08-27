@@ -9,6 +9,7 @@
  * Заморозка аккаунта = kill процесса (аналог сноса webview).
  */
 const { spawn, spawnSync } = require('child_process');
+const provisioner = require('./signal-provision');
 const fsSync = require('fs');
 const readline = require('readline');
 const path = require('path');
@@ -41,6 +42,13 @@ const LINK_TIMEOUT_MS = 3 * 60 * 1000; // QR у Signal живёт ~3 минут�
 
 const IS_WIN = process.platform === 'win32';
 
+/* Launcher signal-cli на Windows — .bat, а его нельзя запустить напрямую:
+   spawn падает с EINVAL, нужна оболочка. Через оболочку путь идёт строкой
+   команды, поэтому его ещё и кавычим: в C:\Users\Имя Фамилия\… пробел иначе
+   разрывает команду. */
+const needsShell = (bin) => IS_WIN && /\.(bat|cmd)$/i.test(String(bin || ''));
+const cliCmd = (bin) => (needsShell(bin) ? `"${bin}"` : bin);
+
 function findSignalCli() {
   for (const p of CLI_CANDIDATES) {
     try { if (fsSync.existsSync(p)) return p; } catch { /* ignore */ }
@@ -57,18 +65,30 @@ function findSignalCli() {
 }
 
 // brew-обёртка signal-cli сама найдёт java, но PATH GUI-процесса macOS не
-// содержит /opt/homebrew/bin — добавляем явно.
-const spawnEnv = () => ({
+// содержит /opt/homebrew/bin — добавляем явно. javaHome непустой, когда деке
+// пришлось принести собственную Java: launcher signal-cli читает JAVA_HOME.
+const spawnEnv = (javaHome) => ({
   ...process.env,
   PATH: `${process.env.PATH || ''}:/opt/homebrew/bin:/usr/local/bin`,
+  ...(javaHome ? { JAVA_HOME: javaHome } : {}),
 });
 
-function initSignal({ getMainWindow, getAccounts, saveStore, storePath }) {
+function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userDataPath }) {
   // Ленивое разрешение: signal-cli могли установить УЖЕ ПОСЛЕ старта деки —
   // при null перепроверяем на каждом обращении, без перезапуска приложения.
-  let _cliPath = findSignalCli();
+  let _cliPath = null;
+  let _javaHome = '';
+  /* Свой рантайм в userData приоритетнее системного: его версию мы знаем
+     и проверили по хешу, а системный signal-cli мог остаться старым. */
+  const resolveCli = () => {
+    const own = userDataPath ? provisioner.provisioned(userDataPath) : null;
+    if (own) { _javaHome = own.javaHome; return own.bin; }
+    _javaHome = '';
+    return findSignalCli();
+  };
+  _cliPath = resolveCli();
   const cli = () => {
-    if (!_cliPath) _cliPath = findSignalCli();
+    if (!_cliPath) _cliPath = resolveCli();
     return _cliPath;
   };
   /* Локальная история сообщений (аналог базы Signal Desktop, но плоский
@@ -224,7 +244,7 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath }) {
   function listLinkedNumbers() {
     return new Promise((resolve) => {
       if (!cli()) { resolve([]); return; }
-      const proc = spawn(cli(), ['listAccounts'], { env: spawnEnv() });
+      const proc = spawn(cliCmd(cli()), ['listAccounts'], { env: spawnEnv(_javaHome), shell: needsShell(cli()) });
       let out = '';
       const timer = setTimeout(() => { try { proc.kill(); } catch { /* ignore */ } }, 30000);
       proc.stdout.on('data', (d) => { out += String(d); });
@@ -345,14 +365,14 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath }) {
     // оставляло java-сироту. Своя process group → kill(-pid) убивает дерево.
     const bin = cli();
     const proc = spawn(
-      bin,
+      cliCmd(bin),
       ['-a', account.signalNumber, 'jsonRpc'],
       {
-        env: spawnEnv(),
+        env: spawnEnv(_javaHome),
         stdio: ['pipe', 'pipe', 'pipe'],
         detached: !IS_WIN,
         // На Windows signal-cli — .bat-обёртка над Java: без shell spawn падает
-        shell: IS_WIN && /\.(bat|cmd)$/i.test(String(bin || '')),
+        shell: needsShell(bin),
       },
     );
     const entry = { proc, deliberate: false, nextId: 1, pending: new Map() };
@@ -533,36 +553,42 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath }) {
     if (nextStatus) setStatus(accountId, nextStatus);
   }
 
-  /* Установка signal-cli прямо из приложения: пользователю не место в
-     терминале. По завершении сразу открываем привязку (QR). */
+  /* Установка прямо из приложения: ни терминала, ни Homebrew, ни ручной
+     установки Java — дека приносит signal-cli и, если нужно, JRE сама
+     (см. signal-provision.js). По завершении сразу открываем привязку (QR). */
   let _installing = false;
+  let _installCancelled = false;
   function installCli(accountId) {
     if (_installing) return { ok: false, error: 'already_installing' };
-    if (IS_WIN) return { ok: false, error: 'no_brew' };
-    const brew = ['/opt/homebrew/bin/brew', '/usr/local/bin/brew'].find((b) => {
-      try { return fsSync.existsSync(b); } catch { return false; }
-    });
-    if (!brew) return { ok: false, error: 'no_brew' };
+    if (!userDataPath) return { ok: false, error: 'no_user_data' };
     _installing = true;
+    _installCancelled = false;
     setStatus(accountId, 'installing');
-    const proc = spawn(brew, ['install', 'signal-cli'], { env: spawnEnv() });
-    const relay = (chunk) => {
-      const line = String(chunk).split('\n').filter(Boolean).pop();
-      if (line) emit({ kind: 'install-log', accountId, line: line.slice(0, 160) });
-    };
-    proc.stdout.on('data', relay);
-    proc.stderr.on('data', relay);
-    proc.on('error', () => { _installing = false; setStatus(accountId, 'no_cli', { error: 'install_failed' }); });
-    proc.on('close', () => {
+    emit({ kind: 'install-progress', accountId, stage: 'start', percent: 0, sizeMb: provisioner.downloadSizeMb() });
+
+    provisioner.provision(
+      userDataPath,
+      ({ stage, percent }) => emit({ kind: 'install-progress', accountId, stage, percent }),
+      () => _installCancelled,
+    ).then((res) => {
       _installing = false;
       _cliPath = null; // перепроверить путь после установки
-      if (cli()) {
+      if (res.ok && cli()) {
         setStatus(accountId, 'unlinked');
         startLink(accountId); // сразу к QR-коду
       } else {
-        setStatus(accountId, 'no_cli', { error: 'install_failed' });
+        setStatus(accountId, 'no_cli', { error: res.error || 'install_failed' });
       }
+    }).catch((e) => {
+      _installing = false;
+      setStatus(accountId, 'no_cli', { error: String(e && e.message || e).slice(0, 120) });
     });
+    return { ok: true };
+  }
+
+  function cancelInstall() {
+    if (!_installing) return { ok: false, error: 'not_installing' };
+    _installCancelled = true;
     return { ok: true };
   }
 
@@ -581,7 +607,7 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath }) {
     if (!account) return { ok: false, error: 'account_not_found' };
     if (linkJob) cancelLink(); // новая линковка отменяет предыдущую
 
-    const proc = spawn(cli(), ['link', '-n', 'OmniDeck'], { env: spawnEnv(), stdio: ['ignore', 'pipe', 'pipe'], detached: !IS_WIN });
+    const proc = spawn(cliCmd(cli()), ['link', '-n', 'OmniDeck'], { env: spawnEnv(_javaHome), stdio: ['ignore', 'pipe', 'pipe'], detached: !IS_WIN, shell: needsShell(cli()) });
     const timer = setTimeout(() => {
       if (linkJob?.proc === proc) cancelLink();
     }, LINK_TIMEOUT_MS);
@@ -713,6 +739,7 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath }) {
     resumeAfterSleep,
     startLink,
     installCli,
+    cancelInstall,
     send,
     sendReaction,
     listContacts,

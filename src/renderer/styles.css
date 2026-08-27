@@ -6340,6 +6340,21 @@ html[data-theme='light'] { color-scheme: light; }
   margin-top: 6px;
 }
 .signal-card-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 10px; }
+.signal-install-bar {
+  width: min(260px, 80%);
+  height: 4px;
+  margin: 12px auto 0;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.signal-install-fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #3A76F0;
+  transition: width 0.25s ease;
+}
 .signal-btn-primary {
   background: #3A76F0;
   border-color: #3A76F0;

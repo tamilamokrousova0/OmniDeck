@@ -382,15 +382,11 @@ function applyLocalReceipt(accountId, { read, timestamps }) {
 const STATUS_TEXT = {
   no_cli: {
     title: 'Подключить Signal',
-    sub: 'Signal не отдаёт переписку браузерам, поэтому дека использует официальный клиент signal-cli. Нажмите — установим его сами и сразу покажем QR-код.',
-  },
-  no_cli_win: {
-    title: 'Нужен signal-cli',
-    sub: 'На Windows его ставят вручную: скачайте архив signal-cli, распакуйте и добавьте папку bin в переменную PATH. Нужна также Java 21+. После этого вернитесь сюда — появится QR-код.',
+    sub: 'Signal не отдаёт переписку браузерам, поэтому дека использует официальный клиент signal-cli. Нажмите — дека скачает и настроит его сама, а затем покажет QR-код.',
   },
   installing: {
-    title: 'Устанавливаю signal-cli…',
-    sub: 'Один раз, займёт пару минут. Сразу после установки появится QR-код.',
+    title: 'Готовлю Signal…',
+    sub: 'Один раз: дека скачивает клиент Signal. Сразу после этого появится QR-код.',
   },
   unlinked: {
     title: 'Привязать Signal к OmniDeck',
@@ -537,10 +533,7 @@ function render() {
   const card = document.createElement('div');
   card.className = 'signal-card';
 
-  const isWin = state?.runtime?.platform === 'win32';
-  // На Windows нет Homebrew — там инструкция, а не кнопка установки
-  const metaKey = (status === 'no_cli' && isWin) ? 'no_cli_win' : status;
-  const meta = STATUS_TEXT[metaKey] || { title: status, sub: '' };
+  const meta = STATUS_TEXT[status] || { title: status, sub: '' };
 
   const icon = document.createElement('div');
   icon.className = 'signal-card-icon';
@@ -573,34 +566,30 @@ function render() {
   const actions = document.createElement('div');
   actions.className = 'signal-card-actions';
 
-  if (status === 'no_cli' && isWin) {
-    const dl = document.createElement('button');
-    dl.className = 'btn btn-primary signal-btn-primary';
-    dl.textContent = 'Открыть страницу загрузки';
-    dl.addEventListener('click', () => {
-      window.waDeck.openExternal?.('https://github.com/AsamK/signal-cli/releases/latest')?.catch?.(() => {});
-    });
-    actions.appendChild(dl);
-    const recheck = document.createElement('button');
-    recheck.className = 'btn';
-    recheck.textContent = 'Проверить снова';
-    recheck.addEventListener('click', () => refreshAccount(account.id));
-    actions.appendChild(recheck);
-  } else if (status === 'no_cli') {
+  if (status === 'no_cli') {
     const inst = document.createElement('button');
     inst.className = 'btn btn-primary signal-btn-primary';
-    inst.textContent = 'Установить и показать QR';
+    inst.textContent = 'Подключить Signal';
     inst.addEventListener('click', async () => {
       inst.disabled = true;
       const res = await window.waDeck.signalInstallCli({ accountId: account.id }).catch(() => null);
       if (!res?.ok) {
         inst.disabled = false;
-        statusLine.textContent = res?.error === 'no_brew'
-          ? 'Не нашёл Homebrew. Установите signal-cli вручную: brew install signal-cli'
-          : `Не удалось запустить установку: ${res?.error || 'ошибка'}`;
+        statusLine.textContent = `Не удалось начать установку: ${res?.error || 'ошибка'}`;
       }
     });
     actions.appendChild(inst);
+  }
+  if (status === 'installing') {
+    const bar = document.createElement('div');
+    bar.className = 'signal-install-bar';
+    bar.innerHTML = '<div class="signal-install-fill" id="signal-install-fill"></div>';
+    card.appendChild(bar); // actions добавляется ниже — полоса окажется над кнопками
+    const stop = document.createElement('button');
+    stop.className = 'btn';
+    stop.textContent = 'Отменить';
+    stop.addEventListener('click', () => window.waDeck.signalInstallCancel?.().catch(() => {}));
+    actions.appendChild(stop);
   }
   if (status === 'unlinked' || status === 'error' && !account.signalNumber) {
     const linkBtn = document.createElement('button');
@@ -1424,12 +1413,18 @@ function refreshAccount(accountId) {
 
 function handleEvent(payload) {
   const kind = String(payload?.kind || '');
-  if (kind === 'install-log') {
-    // Живая строка вывода brew, чтобы установка не выглядела зависшей
+  if (kind === 'install-progress') {
+    /* Загрузка идёт минуты — без процентов экран выглядит зависшим */
+    if (_statuses.get(String(payload.accountId || '')) !== 'installing') return;
     const sub = _panel?.querySelector('.signal-card-sub');
-    if (sub && _statuses.get(String(payload.accountId || '')) === 'installing') {
-      sub.textContent = String(payload.line || '').slice(0, 120);
-    }
+    const fill = _panel?.querySelector('#signal-install-fill');
+    const pct = Math.max(0, Math.min(100, Number(payload.percent) || 0));
+    const label = payload.stage === 'jre' ? 'Загружаю Java для Signal'
+      : payload.stage === 'unpack' ? 'Распаковываю'
+      : payload.stage === 'start' ? `Загружаю клиент Signal (${payload.sizeMb || '~150'} МБ)`
+      : 'Загружаю клиент Signal';
+    if (sub) sub.textContent = payload.stage === 'start' ? `${label}…` : `${label} — ${pct}%`;
+    if (fill) fill.style.width = `${pct}%`;
     return;
   }
   if (kind === 'model-progress') {

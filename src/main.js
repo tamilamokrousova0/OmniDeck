@@ -3695,6 +3695,9 @@ function registerIpc() {
   handle('signal-install-cli', async (_event, payload) => {
     return signalService?.installCli(String(payload?.accountId || '')) || { ok: false, error: 'not_ready' };
   });
+  handle('signal-install-cancel', async () => {
+    return signalService?.cancelInstall() || { ok: false, error: 'not_ready' };
+  });
   handle('signal-link-cancel', async () => {
     signalService?.cancelLink();
     return { ok: true };
@@ -4200,6 +4203,7 @@ async function bootstrap() {
     getAccounts: () => state.store.accounts,
     saveStore,
     storePath: path.join(state.paths.userData, 'signal-messages.json'),
+    userDataPath: state.paths.userData, // сюда дека ставит свой signal-cli и JRE
   });
   registerIpc();
   createWindow();
