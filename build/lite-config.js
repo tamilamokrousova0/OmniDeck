@@ -44,7 +44,11 @@ const liteIcon = 'assets/icon/omnideck-lite-icon-1024.png';
 const empty = [{ from: 'build/empty', to: 'empty' }];
 config.mac = { ...config.mac, icon: liteIcon, extraResources: empty, artifactName: 'OmniDeck-Lite-${version}-${arch}.${ext}' };
 config.win = { ...config.win, icon: liteIcon, extraResources: empty, artifactName: 'OmniDeck-Lite-${version}-${arch}.${ext}' };
-config.nsis = { ...config.nsis, installerIcon: liteIcon, uninstallerIcon: liteIcon, shortcutName: 'OmniDeck Lite', uninstallDisplayName: 'OmniDeck Lite ${version}' };
+/* installerIcon/uninstallerIcon НЕ переопределяем: makensis принимает только
+   настоящий .ico, а PNG роняет сборку («invalid icon file»). Иконку самого
+   приложения electron-builder конвертирует из PNG сам, поэтому в системе
+   лайт всё равно выглядит по-своему; окно установщика остаётся с базовой. */
+config.nsis = { ...config.nsis, shortcutName: 'OmniDeck Lite', uninstallDisplayName: 'OmniDeck Lite ${version}' };
 
 fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
 const out = path.join(root, 'dist', '.lite-build.json');
