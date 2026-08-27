@@ -11,4 +11,9 @@
     <path d="M38.62 20.63 A15 15 0 0 1 28.39 38.34" stroke="#7b4fd4"/>
   </g>
   </g>
+  <!-- Подпись под знаком. Размер выбран так, чтобы читалась в доке (там иконка
+       ~128 px на retina, то есть кегль ~13 px) и не спорила со знаком. -->
+  <text x="512" y="892" text-anchor="middle"
+        font-family="-apple-system, SF Pro Text, Helvetica Neue, Arial, sans-serif"
+        font-size="74" font-weight="600" letter-spacing="4" fill="#2a3340" fill-opacity="0.72">Lite</text>
 </svg>
