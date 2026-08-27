@@ -36,10 +36,15 @@ config.publish = {
 };
 
 // Ни whisper, ни llama, ни примеры брифа в лайте не нужны: вырезанные функции.
+/* Своя иконка: имена бандлов и так разные («OmniDeck Lite.app»), но в доке и
+   Finder обе сборки выглядели одинаково — светлая плитка вместо тёмной решает
+   это без единого слова. PNG electron-builder сам конвертирует в icns и ico. */
+const liteIcon = 'assets/icon/omnideck-lite-icon-1024.png';
+
 const empty = [{ from: 'build/empty', to: 'empty' }];
-config.mac = { ...config.mac, extraResources: empty, artifactName: 'OmniDeck-Lite-${version}-${arch}.${ext}' };
-config.win = { ...config.win, extraResources: empty, artifactName: 'OmniDeck-Lite-${version}-${arch}.${ext}' };
-config.nsis = { ...config.nsis, shortcutName: 'OmniDeck Lite', uninstallDisplayName: 'OmniDeck Lite ${version}' };
+config.mac = { ...config.mac, icon: liteIcon, extraResources: empty, artifactName: 'OmniDeck-Lite-${version}-${arch}.${ext}' };
+config.win = { ...config.win, icon: liteIcon, extraResources: empty, artifactName: 'OmniDeck-Lite-${version}-${arch}.${ext}' };
+config.nsis = { ...config.nsis, installerIcon: liteIcon, uninstallerIcon: liteIcon, shortcutName: 'OmniDeck Lite', uninstallDisplayName: 'OmniDeck Lite ${version}' };
 
 fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
 const out = path.join(root, 'dist', '.lite-build.json');
