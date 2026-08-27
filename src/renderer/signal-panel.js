@@ -384,6 +384,10 @@ const STATUS_TEXT = {
     title: 'Подключить Signal',
     sub: 'Signal не отдаёт переписку браузерам, поэтому дека использует официальный клиент signal-cli. Нажмите — установим его сами и сразу покажем QR-код.',
   },
+  no_cli_win: {
+    title: 'Нужен signal-cli',
+    sub: 'На Windows его ставят вручную: скачайте архив signal-cli, распакуйте и добавьте папку bin в переменную PATH. Нужна также Java 21+. После этого вернитесь сюда — появится QR-код.',
+  },
   installing: {
     title: 'Устанавливаю signal-cli…',
     sub: 'Один раз, займёт пару минут. Сразу после установки появится QR-код.',
@@ -533,7 +537,10 @@ function render() {
   const card = document.createElement('div');
   card.className = 'signal-card';
 
-  const meta = STATUS_TEXT[status] || { title: status, sub: '' };
+  const isWin = state?.runtime?.platform === 'win32';
+  // На Windows нет Homebrew — там инструкция, а не кнопка установки
+  const metaKey = (status === 'no_cli' && isWin) ? 'no_cli_win' : status;
+  const meta = STATUS_TEXT[metaKey] || { title: status, sub: '' };
 
   const icon = document.createElement('div');
   icon.className = 'signal-card-icon';
@@ -566,7 +573,20 @@ function render() {
   const actions = document.createElement('div');
   actions.className = 'signal-card-actions';
 
-  if (status === 'no_cli') {
+  if (status === 'no_cli' && isWin) {
+    const dl = document.createElement('button');
+    dl.className = 'btn btn-primary signal-btn-primary';
+    dl.textContent = 'Открыть страницу загрузки';
+    dl.addEventListener('click', () => {
+      window.waDeck.openExternal?.('https://github.com/AsamK/signal-cli/releases/latest')?.catch?.(() => {});
+    });
+    actions.appendChild(dl);
+    const recheck = document.createElement('button');
+    recheck.className = 'btn';
+    recheck.textContent = 'Проверить снова';
+    recheck.addEventListener('click', () => refreshAccount(account.id));
+    actions.appendChild(recheck);
+  } else if (status === 'no_cli') {
     const inst = document.createElement('button');
     inst.className = 'btn btn-primary signal-btn-primary';
     inst.textContent = 'Установить и показать QR';
@@ -686,7 +706,7 @@ async function transcribeAttachment(account, msg, att, btn) {
     if (btn) btn.textContent = '⏳ расшифровка…';
     const res = await window.waDeck.signalTranscribeWav({ wav });
     if (!res?.ok) {
-      const msgs = { busy: 'Уже идёт другая расшифровка', no_speech: 'Речь не распознана', no_whisper: 'Модуль распознавания не найден', model_declined: '' };
+      const msgs = { busy: 'Уже идёт другая расшифровка', no_speech: 'Речь не распознана', no_whisper: 'Модуль распознавания не запускается — проверьте установку приложения', model_declined: '' };
       throw new Error(msgs[res?.error] ?? (res?.error || 'transcribe_failed'));
     }
     msg.transcript = res.text;

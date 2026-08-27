@@ -2003,7 +2003,15 @@ function createWindow() {
     }
   });
 
-  mainWindow.webContents.on('before-input-event', (event, input) => {
+  mainWindow.webContents.on('before-input-event', (event, input) => routeHostHotkey(event, input));
+  attachWindowResilience();
+}
+
+/* Маршрутизация сквозных хоткеев. Вешается И на окно деки, И на КАЖДЫЙ
+   webview-гость: когда курсор стоит в поле ввода мессенджера, клавиатурные
+   события уходят в его webContents и до окна деки не доходят вовсе —
+   именно поэтому Cmd+Shift+E «не работал» из чата. */
+function routeHostHotkey(event, input) {
     if (String(input?.type || '').toLowerCase() !== 'keydown') return;
     const sendToRenderer = (channel) => {
       try {
@@ -2039,18 +2047,6 @@ function createWindow() {
       } catch { /* ignore */ }
       return;
     }
-    // Cmd/Ctrl+Shift+E — «вставить как человеческий набор». Как и остальные
-    // сквозные хоткеи, перехват в main: фокус почти всегда в композере guest.
-    if ((input.meta || input.control) && input.shift && !input.alt
-        && String(input?.code || '') === 'KeyE') {
-      event.preventDefault();
-      try {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('host-hotkey', { code: 'KeyE', shift: true });
-        }
-      } catch { /* ignore */ }
-      return;
-    }
     // Сквозные хоткеи: Cmd+1..9 / K / T / R / зум раньше умирали, как только
     // курсор оказывался в композере WhatsApp (т.е. большую часть дня) — host-
     // keydown в renderer их не видел. Тот же принцип, что у Esc и Cmd+U:
@@ -2073,7 +2069,9 @@ function createWindow() {
         }
       }
     }
-  });
+}
+
+function attachWindowResilience() {
   /* ── Main-window resilience ──
      Over long sessions (every account's <webview> is kept on a hot GPU
      compositor layer for instant switching — see 0.7.9) the main renderer or
@@ -2247,9 +2245,13 @@ function setupWebviewGuards() {
     // его состояние трекается по клавиатурным событиям guest-а.
     let _modClickDown = false;
     let _modClickTs = 0;
-    contents.on('before-input-event', (_e, input) => {
+    contents.on('before-input-event', (event, input) => {
       _modClickDown = Boolean(input?.meta || input?.control);
       _modClickTs = Date.now();
+      // Курсор в поле ввода мессенджера — клавиши идут СЮДА, а не в окно деки:
+      // без этой строки сквозные хоткеи (Cmd+K/T/R/U, Cmd+Shift+E, F1, Esc)
+      // из чата не срабатывали вовсе
+      routeHostHotkey(event, input);
     });
     // Срок годности флага: keyup мог уйти мимо этого webContents (фокус увело
     // открытие внешнего браузера) — иначе «наоборот» залипал до следующей клавиши

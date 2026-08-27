@@ -24,7 +24,6 @@ import { translatorBarScript } from '../webview-scripts/translator-bar.js';
 import { slashTemplatesScript } from '../webview-scripts/slash-templates.js';
 import { voiceTranscribeButtonsScript } from '../webview-scripts/voice-transcribe-buttons.js';
 import { insertTextScript } from '../webview-scripts/insert-text.js';
-import { humanTypeScript } from '../webview-scripts/human-type.js';
 import { activeChatContactScript } from '../webview-scripts/active-chat-contact.js';
 import {
   voiceMessageSetupScript,
@@ -901,39 +900,6 @@ async function resetWebviewUiState(webview, tries = 2) {
   }
 }
 
-/* Cmd/Ctrl+Shift+E: буфер обмена → посимвольный «человеческий» набор в
-   композер активного аккаунта. Скрипт сам защищён от повторного запуска. */
-async function humanTypePaste() {
-  const account = activeAccount();
-  if (!account || account.frozen) return;
-  if (account.type === 'signal') {
-    setStatus('«Человеческий набор» доступен только в WhatsApp и Telegram');
-    return;
-  }
-  const webview = selectedWebview();
-  if (!isWebviewReady(webview)) {
-    setStatus('Аккаунт ещё загружается — попробуйте через секунду');
-    return;
-  }
-
-  const clip = await window.waDeck.getClipboardText().catch(() => null);
-  const text = String(clip?.text || '').replace(/\r\n/g, '\n');
-  if (!text.trim()) {
-    setStatus('Буфер обмена пуст');
-    return;
-  }
-
-  setStatus(`${account.name}: печатаю из буфера... (Esc в чате — отмена)`);
-  const result = await safeExecuteInWebview(webview, humanTypeScript(text), true);
-  if (result?.ok) {
-    setStatus(result.aborted ? `${account.name}: набор прерван` : `${account.name}: текст набран`);
-  } else if (result?.error === 'already_typing') {
-    setStatus('Набор уже идёт');
-  } else if (result) {
-    setStatus('Не удалось набрать текст (композер не найден?)');
-  }
-}
-
 async function insertTextIntoActiveChat(text) {
   let safeText = String(text || '').trim();
   if (!safeText) {
@@ -1129,7 +1095,6 @@ export {
   sendWebviewInput,
   resetWebviewUiState,
   insertTextIntoActiveChat,
-  humanTypePaste,
   prefillScheduleTargetFromActiveChat,
   sendAudioAsVoiceMessage,
 };

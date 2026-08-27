@@ -115,6 +115,14 @@ jobs:
           mkdir -p build/whisper/win
           unzip -j -o whisper-bin.zip -d build/whisper/win
           test -f build/whisper/win/whisper-cli.exe
+          # Не только «файл на месте»: бинарь обязан СТАРТОВАТЬ (без нужных
+          # DLL рядом он падает, и в приложении это выглядит как «модуль не
+          # установлен»). Код возврата у --help ненулевой — проверяем вывод.
+          cd build/whisper/win
+          ./whisper-cli.exe --help > whisper-help.txt 2>&1 || true
+          grep -qiE "usage|whisper|--file" whisper-help.txt
+          rm -f whisper-help.txt
+          cd ../../..
 
       # Windows code signing (SmartScreen): подпись включается наличием
       # секретов, без них сборка остаётся неподписанной.

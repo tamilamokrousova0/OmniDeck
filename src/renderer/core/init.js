@@ -26,7 +26,6 @@ import {
   safeExecuteInWebview,
   sendWebviewInput,
   insertTextIntoActiveChat,
-  humanTypePaste,
   applyHibernationSetting,
   applyZoom,
 } from './webviews.js';
@@ -145,8 +144,6 @@ async function init() {
     state.hostHotkeyUnsubscribe = window.waDeck.onHostHotkey(({ code }) => {
       const c = String(code || '');
       if (c === 'F1') { window.WaDeckHelp?.toggle?.(); return; }
-      // Cmd+Shift+E — только с шифтом и роутится (см. main.js), код уникален
-      if (c === 'KeyE') { humanTypePaste().catch(() => {}); return; }
       const hostInputFocused = (() => {
         const a = document.activeElement;
         return Boolean(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable));

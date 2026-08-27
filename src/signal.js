@@ -33,7 +33,9 @@ function avatarPathFor(ids) {
   return '';
 }
 
-const CLI_CANDIDATES = ['/opt/homebrew/bin/signal-cli', '/usr/local/bin/signal-cli'];
+const CLI_CANDIDATES = process.platform === 'win32'
+  ? [] // на Windows ищем только через PATH (where): путей установки нет стандартных
+  : ['/opt/homebrew/bin/signal-cli', '/usr/local/bin/signal-cli'];
 const RETRY_MS = 15000;
 const LINK_TIMEOUT_MS = 3 * 60 * 1000; // QR у Signal живёт ~3 минуты
 
@@ -341,10 +343,17 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath }) {
 
     // detached: signal-cli — shell-обёртка над java; убийство одной обёртки
     // оставляло java-сироту. Своя process group → kill(-pid) убивает дерево.
+    const bin = cli();
     const proc = spawn(
-      cli(),
+      bin,
       ['-a', account.signalNumber, 'jsonRpc'],
-      { env: spawnEnv(), stdio: ['pipe', 'pipe', 'pipe'], detached: !IS_WIN },
+      {
+        env: spawnEnv(),
+        stdio: ['pipe', 'pipe', 'pipe'],
+        detached: !IS_WIN,
+        // На Windows signal-cli — .bat-обёртка над Java: без shell spawn падает
+        shell: IS_WIN && /\.(bat|cmd)$/i.test(String(bin || '')),
+      },
     );
     const entry = { proc, deliberate: false, nextId: 1, pending: new Map() };
     daemons.set(accountId, entry);

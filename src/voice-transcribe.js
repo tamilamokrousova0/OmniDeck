@@ -50,20 +50,44 @@ function whisperBinaryPath() {
   // Локальные mac-сборки без CI-шага упаковываются с пустым resources/whisper —
   // brew-бинарь как последний фолбэк, чтобы фича не умирала молча.
   if (process.platform === 'darwin') candidates.push('/opt/homebrew/bin/whisper-cli');
-  // existsSync мало: динамически слинкованный бинарь без своих dylib рядом
-  // (обломанный @rpath) существует, но умирает на dyld. Кандидат обязан
-  // реально запуститься — иначе переходим к следующему.
+  // Windows: официальный архив whisper.cpp раскладывается по-разному —
+  // держим и подкаталог Release как запасной путь
+  if (process.platform === 'win32') {
+    const extra = app.isPackaged
+      ? path.join(process.resourcesPath, 'whisper', 'Release', name)
+      : path.join(__dirname, '..', 'build', 'whisper', 'win', 'Release', name);
+    candidates.push(extra);
+  }
+  // existsSync мало: динамически слинкованный бинарь без своих библиотек рядом
+  // существует, но умирает при старте. Кандидат обязан реально запуститься.
   _binPathCache = candidates.find((p) => {
-    if (!fsSync.existsSync(p)) return false;
+    if (!fsSync.existsSync(p)) { _binReason = `файл не найден: ${p}`; return false; }
     try {
-      const r = spawnSync(p, ['--help'], { timeout: 4000, windowsHide: true, cwd: path.dirname(p) });
-      return r.status === 0;
-    } catch {
+      const r = spawnSync(p, ['--help'], { timeout: 6000, windowsHide: true, cwd: path.dirname(p), encoding: 'utf8' });
+      if (r.error) {
+        // ENOENT/EACCES или отсутствующая DLL рядом с exe
+        _binReason = `не запускается (${r.error.code || r.error.message}): ${p}`;
+        return false;
+      }
+      const out = `${r.stdout || ''}${r.stderr || ''}`;
+      /* Код возврата на --help у разных сборок разный (Windows-бинарь отвечает
+         ненулевым) — раньше из-за строгой проверки рабочий модуль объявлялся
+         отсутствующим. Важен сам факт запуска и осмысленный вывод. */
+      if (r.status === 0 || /usage|whisper|model|--file/i.test(out)) return true;
+      _binReason = `запустился, но ответил кодом ${r.status}: ${p}`;
+      return false;
+    } catch (e) {
+      _binReason = String(e?.message || e).slice(0, 120);
       return false;
     }
   }) || null;
+  if (_binPathCache) _binReason = '';
   return _binPathCache;
 }
+
+/* Причина, по которой модуль не нашёлся — для внятного сообщения в UI */
+let _binReason = '';
+function whisperFailureReason() { return _binReason; }
 
 function modelPath() {
   return path.join(app.getPath('userData'), 'whisper', MODEL_FILE);
@@ -612,8 +636,9 @@ async function transcribeVoiceAt(contents, voiceId, parentWindow, kind = 'voice'
   try {
     const binPath = whisperBinaryPath();
     if (!binPath) {
+      const why = whisperFailureReason();
       await setStatus(contents, voiceId,
-        'Модуль распознавания не найден (whisper-cli). Переустановите приложение.', 'error');
+        `Модуль распознавания не запускается${why ? ' — ' + why : ' (whisper-cli не найден)'}`, 'error');
       return;
     }
     if (!(await ensureModel(contents, voiceId, parentWindow))) return;
@@ -687,4 +712,4 @@ async function transcribeWavBase64(wavB64, parentWindow, onProgress) {
   }
 }
 
-module.exports = { transcribeVoiceAt, transcribeWavBase64, whisperBinaryPath, modelReady, cleanupStaleModels, killWhisper };
+module.exports = { transcribeVoiceAt, transcribeWavBase64, whisperBinaryPath, whisperFailureReason, modelReady, cleanupStaleModels, killWhisper };
