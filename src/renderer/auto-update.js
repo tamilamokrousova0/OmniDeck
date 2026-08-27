@@ -150,9 +150,10 @@ import { closeModalAnimated, setStatusZone } from './core/helpers.js';
   // translocated path and can't self-swap). The install buttons then turn
   // into "open GitHub Releases" actions.
   let macManualRequired = false;
+  let manualDownloadMode = false;
 
   async function installUpdate() {
-    if (macManualRequired) {
+    if (macManualRequired || manualDownloadMode) {
       window.waDeck?.openReleasesPage?.();
       return;
     }
@@ -163,6 +164,17 @@ import { closeModalAnimated, setStatusZone } from './core/helpers.js';
     const buttons = [els.updateToastAction].filter(Boolean);
     for (const b of buttons) { b.classList.add('is-busy'); b.disabled = true; }
     const result = await window.waDeck.installDownloadedUpdate().catch(() => null);
+    if (result?.ok && state?.runtime?.platform === 'win32') {
+      /* Программа сейчас закроется и запустится установщик. Если Windows его
+         заблокирует («приложение не проверено»), человек вернётся сюда — и
+         кнопка уже будет вести на ручную загрузку. */
+      manualDownloadMode = true;
+      for (const b of buttons) { b.classList.remove('is-busy'); b.disabled = false; b.textContent = 'Скачать вручную'; }
+      if (els.updateToastSub) {
+        els.updateToastSub.textContent = 'Если Windows заблокировала установку — нажмите «Скачать вручную» и запустите файл, выбрав «Подробнее» → «Выполнить в любом случае».';
+      }
+      return;
+    }
     if (!result?.ok) {
       if (result?.error === 'mac_manual_required') {
         macManualRequired = true;

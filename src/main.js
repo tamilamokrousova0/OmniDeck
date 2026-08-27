@@ -3882,9 +3882,13 @@ function registerIpc() {
         win.destroy();
       }
 
-      // isSilent=true  — run NSIS silently (no "close app" dialog)
-      // isForceRunAfter=true — relaunch the app after installation
-      autoUpdater.quitAndInstall(true, true);
+      /* isSilent=false на Windows: при тихой установке блокировка
+         неподписанного установщика (SmartScreen / «приложение не проверено
+         Майкрософт») происходит без единого окна — программа просто
+         закрывается и ничего не ставится. С видимым установщиком человек
+         хотя бы видит запрос и может разрешить запуск. */
+      const silent = process.platform !== 'win32';
+      autoUpdater.quitAndInstall(silent, true);
       return { ok: true };
     } catch (error) {
       _appIsQuitting = false;
