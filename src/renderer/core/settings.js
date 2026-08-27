@@ -109,7 +109,10 @@ function refreshTweaksFabVisibility() {
   const fab = document.getElementById('tweaks-fab');
   const popover = document.getElementById('tweaks-panel');
   if (!fab) return;
-  const hubVisible = state.startupHubVisible || !state.activeAccountId || !selectedWebview();
+  const activeAcc = state.accounts?.find((a) => a.id === state.activeAccountId);
+  // Signal-панель — полноценный «мессенджер» без webview: FAB прячем, как в WA/TG
+  const signalActive = activeAcc?.type === 'signal';
+  const hubVisible = state.startupHubVisible || (!signalActive && (!state.activeAccountId || !selectedWebview()));
   const settingsVisible = !state.panelHidden;
   const shouldShow = hubVisible || settingsVisible;
   fab.classList.toggle('is-hidden', !shouldShow);

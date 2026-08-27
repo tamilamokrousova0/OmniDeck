@@ -243,8 +243,9 @@ function bindActions() {
     els.templateTitle?.addEventListener('input', updateTmplEditTitle);
 
     // Hide form automatically after save/delete
-    els.templateSave?.addEventListener('click', () => setTimeout(closeTemplateEdit, 50));
-    els.templateDelete?.addEventListener('click', () => setTimeout(closeTemplateEdit, 50));
+    // Закрытие формы делает сам saveCurrentTemplate по успеху: раньше форма
+  // пряталась безусловно и набранный текст пропадал при любой ошибке
+
 
     window._showTemplateEditForm = () => { openTemplateEdit(); updateTmplEditTitle(); };
     window._hideTemplateEditForm = closeTemplateEdit;
@@ -397,25 +398,10 @@ function bindActions() {
     }
   });
   window.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      if (event.defaultPrevented) return;
-      event.preventDefault();
-      handleEscapeUiReset();
-      return;
-    }
-
+    // Мёртвые дубли (Escape/цифры) снесены: main перехватывает эти хоткеи
+    // through before-input-event с preventDefault — сюда они не долетают.
     const mod = event.metaKey || event.ctrlKey;
     if (!mod) return;
-
-    const digit = parseInt(event.key, 10);
-    if (digit >= 1 && digit <= 9 && !event.shiftKey && !event.altKey) {
-      const account = state.accounts[digit - 1];
-      if (account) {
-        event.preventDefault();
-        setActiveAccount(account.id);
-      }
-      return;
-    }
 
     const tag = (event.target?.tagName || '').toLowerCase();
     const isInput = tag === 'input' || tag === 'textarea' || tag === 'select';
@@ -424,37 +410,6 @@ function bindActions() {
     if (event.key === ',' || event.key === '\u0431') {
       event.preventDefault();
       if (state.panelHidden) { openSettingsPanel(); } else { closeSettingsPanel(); }
-      return;
-    }
-    if (event.code === 'KeyR' && !event.shiftKey) {
-      // Physical-key match: on the RU layout e.key is 'к' and the hotkey was
-      // dead for the app's primary audience (same for CapsLock 'R').
-      event.preventDefault();
-      refreshActiveWebview();
-      return;
-    }
-    if (event.code === 'KeyU' && !event.shiftKey && !event.altKey) {
-      // Следующий непрочитанный: прыжок в чат с наибольшим счётчиком по всем
-      // аккаунтам; повторные нажатия разгребают инбокс дальше без мыши.
-      event.preventDefault();
-      window.WaDeckUnreadFeed?.jumpToNext?.().catch(() => {});
-      return;
-    }
-
-    // Zoom: Cmd/Ctrl + = / + / -
-    if (event.key === '=' || event.key === '+') {
-      event.preventDefault();
-      applyZoom((Number(els.zoomSlider?.value) || 100) + 10);
-      return;
-    }
-    if (event.key === '-') {
-      event.preventDefault();
-      applyZoom((Number(els.zoomSlider?.value) || 100) - 10);
-      return;
-    }
-    if (event.key === '0') {
-      event.preventDefault();
-      applyZoom(100);
       return;
     }
   });

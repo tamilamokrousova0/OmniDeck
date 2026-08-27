@@ -36,13 +36,24 @@ function voiceTranscribeButtonsScript(token) {
     }
 
     /* Голосовое: ряд сообщений в панели чата (#main) с иконкой аудиоплеера.
+       Видео: превью с play-оверлеем (media-play) или уже загруженный <video>.
        data-icon переживает редизайны лучше классов (см. voice-message.js). */
     const VOICE_ICON_SEL = 'span[data-icon*="audio-play"], span[data-icon*="audio-pause"], span[data-icon*="ptt"]';
+    const VIDEO_ICON_SEL = 'span[data-icon*="media-play"], span[data-icon*="video-pip"], span[data-icon*="ptv"]';
+    const rowKind = (row) => {
+      if (row.querySelector(VOICE_ICON_SEL) || row.querySelector('audio')) return 'voice';
+      /* GIF WhatsApp — тоже <video>, но без звука: кнопка там бессмысленна */
+      if (row.querySelector('span[data-icon*="gif"]')) return '';
+      const vid = row.querySelector('video');
+      if (vid && vid.loop && !row.querySelector(VIDEO_ICON_SEL)) return '';
+      if (row.querySelector(VIDEO_ICON_SEL) || vid) return 'video';
+      return '';
+    };
 
-    function makeButton(row) {
+    function makeButton(row, kind) {
       const btn = document.createElement('div');
       btn.className = '__wadeck-voice-btn';
-      btn.textContent = '🎤 расшифровать';
+      btn.textContent = kind === 'video' ? '🎬 расшифровать' : '🎤 расшифровать';
       btn.style.cssText = [
         'margin:2px 8px 2px 48px',
         'padding:2px 9px',
@@ -66,7 +77,7 @@ function voiceTranscribeButtonsScript(token) {
           row.setAttribute('data-wadeck-voice-id', id);
         }
         btn.remove();
-        __waDeckEmit('TRANSCRIBE_VOICE', JSON.stringify({ id: id }));
+        __waDeckEmit('TRANSCRIBE_VOICE', JSON.stringify({ id: id, kind: kind }));
       });
       return btn;
     }
@@ -79,32 +90,43 @@ function voiceTranscribeButtonsScript(token) {
       const stale = main.querySelectorAll('.__wadeck-voice-btn');
       for (let i = 0; i < stale.length; i++) {
         const row = stale[i].closest('[role="row"]');
-        if (!row || (!row.querySelector(VOICE_ICON_SEL) && !row.querySelector('audio'))) {
-          stale[i].remove();
+        if (!row || !rowKind(row)) stale[i].remove();
+      }
+      /* Виртуализация переиспользует ряды: id, оставшийся от прежнего
+         сообщения, приклеивал бы транскрипт к чужому пузырю */
+      const tagged = main.querySelectorAll('[data-wadeck-voice-id]');
+      for (let i = 0; i < tagged.length; i++) {
+        if (!rowKind(tagged[i]) && !tagged[i].querySelector('.__wadeck-voice-tr')) {
+          tagged[i].removeAttribute('data-wadeck-voice-id');
         }
       }
       const rows = main.querySelectorAll('[role="row"]');
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
-        if (!row.querySelector(VOICE_ICON_SEL) && !row.querySelector('audio')) continue;
+        const kind = rowKind(row);
+        if (!kind) continue;
         if (row.querySelector(':scope .__wadeck-voice-btn')) continue;
         const box = row.querySelector(':scope .__wadeck-voice-tr');
         /* Плашка с готовым текстом или прогрессом — кнопка не нужна;
            после ошибки кнопку возвращаем (повторная попытка). */
         if (box && box.dataset.state !== 'error') continue;
-        row.appendChild(makeButton(row));
+        row.appendChild(makeButton(row, kind));
       }
     }
 
     let sweepTimer = null;
     const scheduleSweep = () => {
+      /* Фоновые аккаунты не надо обходить: свип крутился во ВСЕХ webview,
+         хотя кнопки нужны только в том, на который смотрит пользователь.
+         Флаг ставит дека при переключении аккаунта (см. refreshWebviewVisibility). */
+      if (window.__waDeckWebviewActive === false) return;
       if (sweepTimer) return;
       sweepTimer = setTimeout(() => { sweepTimer = null; try { sweep(); } catch (_) {} }, 400);
     };
 
     const observer = new MutationObserver(scheduleSweep);
     observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
-    setInterval(scheduleSweep, 5000);
+    setInterval(scheduleSweep, 8000);
     scheduleSweep();
     return true;
   })();`;

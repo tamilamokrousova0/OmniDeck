@@ -144,6 +144,9 @@
       renderSelect();
       fillEditorFromTemplate(byId(selectedTemplateId));
       setStatus('Шаблон сохранён');
+      // Форму закрываем ТОЛЬКО здесь, по факту успеха: при ошибке юзер
+      // остаётся в форме с набранным текстом
+      try { window._hideTemplateEditForm?.(); } catch { /* ignore */ }
       notifyChange();
     }
 
@@ -163,6 +166,7 @@
       renderSelect();
       fillEditorFromTemplate(null);
       setStatus('Шаблон удалён');
+      try { window._hideTemplateEditForm?.(); } catch { /* ignore */ }
       notifyChange();
     }
 

@@ -24,4 +24,6 @@ import './pin-feed.js';
 import './unread-feed.js';
 import './help.js';
 import './schedule.js';
+import './split.js';
+import './signal-panel.js';
 import './core/init.js';

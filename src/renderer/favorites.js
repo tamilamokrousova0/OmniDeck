@@ -94,7 +94,7 @@ import { showToast } from './core/helpers.js';
       };
       for (const [accountId, favs] of byAccount) {
         const acc = accountById(accountId);
-        if (!acc || acc.type === 'telegram' || acc.frozen) { carry(favs); continue; }
+        if (!acc || acc.type !== 'whatsapp' || acc.frozen) { carry(favs); continue; }
         const webview = state.webviews.get(accountId);
         if (!isWebviewReady(webview)) { carry(favs); continue; }
         let rows = null;

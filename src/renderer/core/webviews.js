@@ -24,6 +24,7 @@ import { translatorBarScript } from '../webview-scripts/translator-bar.js';
 import { slashTemplatesScript } from '../webview-scripts/slash-templates.js';
 import { voiceTranscribeButtonsScript } from '../webview-scripts/voice-transcribe-buttons.js';
 import { insertTextScript } from '../webview-scripts/insert-text.js';
+import { humanTypeScript } from '../webview-scripts/human-type.js';
 import { activeChatContactScript } from '../webview-scripts/active-chat-contact.js';
 import {
   voiceMessageSetupScript,
@@ -85,6 +86,8 @@ function sortTemplatesForChat(list, lang) {
 }
 
 function applyZoom(percent) {
+  const acc = activeAccount();
+  if (acc?.type === 'signal') return; // у Signal-панели нет webview — масштабировать нечего
   const clamped = Math.max(50, Math.min(150, Math.round(percent / 5) * 5));
   const wv = selectedWebview();
   if (wv) {
@@ -199,6 +202,7 @@ function ensureWebview(account) {
   // WhatsApp session that renderAccounts() never shows.
   if (!account || !accountById(account.id)) return;
   if (account.frozen) return;
+  if (account.type === 'signal') return; // нет веб-клиента — панель вместо webview
   if (state.webviews.has(account.id)) return;
 
   const isWhatsApp = account.type !== 'telegram';
@@ -210,7 +214,11 @@ function ensureWebview(account) {
   if (isWhatsApp && state.runtime?.waUserAgent) {
     webview.setAttribute('useragent', state.runtime.waUserAgent);
   }
-  webview.setAttribute('allowpopups', 'false');
+  /* allowpopups ОБЯЗАТЕЛЕН: без него Chromium глушит window.open внутри
+     webview на корню, и setWindowOpenHandler в main не срабатывает — клик по
+     ссылке в чате не делал вообще ничего. Окно при этом никогда не создаётся:
+     наш обработчик всегда возвращает deny и сам решает, куда открыть ссылку. */
+  webview.setAttribute('allowpopups', 'true');
   // backgroundThrottling=false is the third layer of our keep-alive fix.
   // See comments at the top of main.js — without this, hidden webviews
   // (display:none in styles.css) get their timers throttled to 1/min after
@@ -279,7 +287,10 @@ function ensureWebview(account) {
     }
   };
 
-  const onFailLoad = () => {
+  const onFailLoad = (event) => {
+    // Субфреймы (аналитика WA) и ERR_ABORTED/-21 (наш же reload, смена сети)
+    // не должны валить waReady живого аккаунта в 0
+    if (event && (event.isMainFrame === false || event.errorCode === -3 || event.errorCode === -21)) return;
     webview.dataset.waReady = '0';
     updateAccountCardStatus(accountId);
     if (accountId === state.activeAccountId) {
@@ -559,9 +570,10 @@ function ensureWebview(account) {
         // payload уже распарсен наверху диспатча — повторный JSON.parse
         // здесь давал SyntaxError на "[object Object]" и молча глотал клик
         const voiceId = String(payload.id || '');
+        const mediaKind = payload.kind === 'video' ? 'video' : 'voice';
         // id генерируется нашим же скриптом ([a-z0-9]) — всё прочее подделка
         if (/^[a-z0-9]{1,32}$/i.test(voiceId)) {
-          window.waDeck.transcribeVoice({ webContentsId: webview.getWebContentsId(), voiceId });
+          window.waDeck.transcribeVoice({ webContentsId: webview.getWebContentsId(), voiceId, kind: mediaKind });
         }
         return;
       }
@@ -664,7 +676,17 @@ function applyHibernationSetting(minutes) {
     state._hibernationTimer = null;
   }
   if (!state._hibernated) state._hibernated = new Set();
-  if (!minutes || minutes <= 0) return;
+  if (!minutes || minutes <= 0) {
+    // «Выкл» обязан ВЕРНУТЬ уже усыплённые аккаунты: иначе они так и висят
+    // без webview (и без входящих), пока по каждому не кликнешь руками
+    for (const id of Array.from(state._hibernated)) {
+      const acc = accountById(id);
+      if (acc && !acc.frozen) { try { ensureWebview(acc); } catch { /* ignore */ } }
+      markAccountHibernated(id, false);
+    }
+    state._hibernated.clear();
+    return;
+  }
   // Sweep once per minute — granular enough that users see hibernation kick
   // in within a minute of crossing the threshold, cheap enough to run
   // forever (just iterates over state.webviews).
@@ -715,8 +737,11 @@ function markAccountHibernated(accountId, hibernated) {
 
 
 function refreshWebviewVisibility() {
-  const showHub = state.startupHubVisible || !state.activeAccountId || !selectedWebview();
+  const active = activeAccount();
+  const isSignalActive = active?.type === 'signal';
+  const showHub = state.startupHubVisible || (!isSignalActive && (!state.activeAccountId || !selectedWebview()));
   setHubVisibility(showHub);
+  window.WaDeckSignalPanel?.setVisible?.(isSignalActive && !state.startupHubVisible, active);
   let activeLoading = false;
   for (const [accountId, webview] of state.webviews.entries()) {
     const isActive = accountId === state.activeAccountId;
@@ -876,6 +901,39 @@ async function resetWebviewUiState(webview, tries = 2) {
   }
 }
 
+/* Cmd/Ctrl+Shift+E: буфер обмена → посимвольный «человеческий» набор в
+   композер активного аккаунта. Скрипт сам защищён от повторного запуска. */
+async function humanTypePaste() {
+  const account = activeAccount();
+  if (!account || account.frozen) return;
+  if (account.type === 'signal') {
+    setStatus('«Человеческий набор» доступен только в WhatsApp и Telegram');
+    return;
+  }
+  const webview = selectedWebview();
+  if (!isWebviewReady(webview)) {
+    setStatus('Аккаунт ещё загружается — попробуйте через секунду');
+    return;
+  }
+
+  const clip = await window.waDeck.getClipboardText().catch(() => null);
+  const text = String(clip?.text || '').replace(/\r\n/g, '\n');
+  if (!text.trim()) {
+    setStatus('Буфер обмена пуст');
+    return;
+  }
+
+  setStatus(`${account.name}: печатаю из буфера... (Esc в чате — отмена)`);
+  const result = await safeExecuteInWebview(webview, humanTypeScript(text), true);
+  if (result?.ok) {
+    setStatus(result.aborted ? `${account.name}: набор прерван` : `${account.name}: текст набран`);
+  } else if (result?.error === 'already_typing') {
+    setStatus('Набор уже идёт');
+  } else if (result) {
+    setStatus('Не удалось набрать текст (композер не найден?)');
+  }
+}
+
 async function insertTextIntoActiveChat(text) {
   let safeText = String(text || '').trim();
   if (!safeText) {
@@ -887,6 +945,10 @@ async function insertTextIntoActiveChat(text) {
   }
   if (account.frozen) {
     return { ok: false, error: 'account_frozen' };
+  }
+  if (account.type === 'signal') {
+    // Вставляем в композер signal-панели (webview у Signal нет)
+    return window.WaDeckSignalPanel?.insertText?.(safeText) || { ok: false, error: 'no_active_chat' };
   }
 
   const webview = selectedWebview();
@@ -919,7 +981,7 @@ async function insertTextIntoActiveChat(text) {
 async function prefillScheduleTargetFromActiveChat() {
   if (state._editingScheduleId) return; // never clobber an in-progress edit
   const account = activeAccount();
-  if (!account || account.frozen || account.type === 'telegram') return;
+  if (!account || account.frozen || account.type !== 'whatsapp') return;
   const webview = selectedWebview();
   if (!isWebviewReady(webview) || typeof activeChatContactScript !== 'function') return;
   let chatName = '';
@@ -943,7 +1005,7 @@ async function sendAudioAsVoiceMessage() {
     showToast('Нет активного аккаунта', 'warn');
     return;
   }
-  if (account.type === 'telegram') {
+  if (account.type !== 'whatsapp') {
     showToast('Голосовые сообщения доступны только для WhatsApp', 'warn');
     return;
   }
@@ -1067,6 +1129,7 @@ export {
   sendWebviewInput,
   resetWebviewUiState,
   insertTextIntoActiveChat,
+  humanTypePaste,
   prefillScheduleTargetFromActiveChat,
   sendAudioAsVoiceMessage,
 };

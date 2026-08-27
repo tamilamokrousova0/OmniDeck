@@ -84,9 +84,13 @@
     try {
       if (typeof Notification === 'undefined' || Notification.permission === 'denied') return;
       const cnt = next > 99 ? '99+' : String(next);
-      const notification = new Notification(String(account.name || 'Telegram'), {
-        body: `Telegram · новые сообщения · непрочитанных чатов: ${cnt}`,
-        tag: `tg-acc::${id}`,
+      const platform = account.type === 'signal' ? 'Signal' : 'Telegram';
+      const bodyTail = account.type === 'signal'
+        ? `новых сообщений: ${cnt}` // у Signal счётчик — сообщения, не чаты
+        : `непрочитанных чатов: ${cnt}`;
+      const notification = new Notification(String(account.name || platform), {
+        body: `${platform} · новые сообщения · ${bodyTail}`,
+        tag: `acc::${id}`,
         silent: false,
       });
       notification.onclick = () => {
@@ -105,7 +109,7 @@
       const label = item.category === 'imp' ? 'Важный контакт' : 'Избранный контакт';
       const cnt = count > 99 ? '99+' : String(count);
       const notification = new Notification(String(item.name || 'Новое сообщение'), {
-        body: `${item.accountName || 'WA Deck'} · ${label} · новых: ${cnt}`,
+        body: `${item.accountName || 'OmniDeck'} · ${label} · новых: ${cnt}`,
         tag: itemKey(item), // replaces the previous toast for the same contact
         silent: false,
       });

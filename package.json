@@ -1,11 +1,11 @@
 {
-  "name": "wa-deck",
-  "version": "0.9.8",
-  "description": "WA Deck: multi-account WhatsApp manager",
+  "name": "omnideck",
+  "version": "0.10.0",
+  "description": "OmniDeck: multi-account WhatsApp / Telegram / Signal deck",
   "main": "src/main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build:renderer": "esbuild src/renderer/main.entry.js --bundle --outfile=src/renderer/dist/bundle.js --format=iife --target=chrome150 --sourcemap",
+    "build:renderer": "esbuild src/renderer/main.entry.js --bundle --outfile=src/renderer/dist/bundle.js --format=iife --target=chrome152 --sourcemap",
     "start": "npm run build:renderer && electron .",
     "dev": "npm run build:renderer && electron .",
     "dist:mac": "npm run build:renderer && electron-builder --mac dmg zip --arm64",
@@ -18,16 +18,17 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "electron-updater": "^6.3.9"
+    "electron-updater": "^6.3.9",
+    "qrcode-generator": "^2.0.4"
   },
   "devDependencies": {
-    "electron": "^43.4.1",
+    "electron": "^44.0.0",
     "electron-builder": "^26.8.1",
     "esbuild": "^0.28.1"
   },
   "build": {
     "appId": "com.local.wadeck",
-    "productName": "WA Deck",
+    "productName": "OmniDeck",
     "directories": {
       "output": "dist"
     },
@@ -46,7 +47,7 @@
           "to": "whisper"
         }
       ],
-      "artifactName": "WA-Deck-${version}-${arch}.${ext}",
+      "artifactName": "OmniDeck-${version}-${arch}.${ext}",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
@@ -73,7 +74,7 @@
     },
     "win": {
       "icon": "assets/icon/icon.ico",
-      "artifactName": "WA-Deck-${version}-${arch}.${ext}",
+      "artifactName": "OmniDeck-${version}-${arch}.${ext}",
       "extraResources": [
         {
           "from": "build/whisper/win",
@@ -102,8 +103,8 @@
       "allowElevation": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "WA Deck",
-      "uninstallDisplayName": "WA Deck ${version}",
+      "shortcutName": "OmniDeck",
+      "uninstallDisplayName": "OmniDeck ${version}",
       "installerIcon": "assets/icon/icon.ico",
       "uninstallerIcon": "assets/icon/icon.ico",
       "menuCategory": false,
@@ -118,23 +119,23 @@
       "language": "1049"
     },
     "portable": {
-      "artifactName": "WA-Deck-${version}-portable-${arch}.${ext}"
+      "artifactName": "OmniDeck-${version}-portable-${arch}.${ext}"
     },
     "publish": [
       {
         "provider": "github",
         "owner": "tamilamokrousova0",
-        "repo": "WA-Deck",
+        "repo": "OmniDeck",
         "releaseType": "release"
       }
     ]
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tamilamokrousova0/WA-Deck.git"
+    "url": "git+https://github.com/tamilamokrousova0/OmniDeck.git"
   },
-  "homepage": "https://github.com/tamilamokrousova0/WA-Deck",
+  "homepage": "https://github.com/tamilamokrousova0/OmniDeck",
   "bugs": {
-    "url": "https://github.com/tamilamokrousova0/WA-Deck/issues"
+    "url": "https://github.com/tamilamokrousova0/OmniDeck/issues"
   }
 }

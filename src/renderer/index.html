@@ -4,26 +4,19 @@
     <meta charset="UTF-8" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file: blob:; connect-src https://geocoding-api.open-meteo.com https://api.open-meteo.com https://github.com https://api.github.com; frame-src https://web.whatsapp.com https://web.telegram.org;" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WA Deck</title>
+    <title>OmniDeck</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div id="app-root" class="app panel-hidden">
       <aside class="sidebar">
-        <div id="brand-hub" class="brand" title="WA Deck">
-          <svg class="brand-hub-svg" viewBox="0 0 80 80" width="34" height="34">
-            <line class="brand-link brand-link-1" x1="40" y1="40" x2="18" y2="16" stroke="#5b9bd5" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
-            <line class="brand-link brand-link-2" x1="40" y1="40" x2="64" y2="14" stroke="#5b9bd5" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
-            <line class="brand-link brand-link-3" x1="40" y1="40" x2="12" y2="56" stroke="#5b9bd5" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
-            <line class="brand-link brand-link-4" x1="40" y1="40" x2="68" y2="58" stroke="#5b9bd5" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
-            <line class="brand-link brand-link-5" x1="40" y1="40" x2="40" y2="72" stroke="#5b9bd5" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
-            <circle class="brand-node brand-center" cx="40" cy="40" r="10" fill="#2a6ef5"/>
-            <circle class="brand-node brand-leaf brand-leaf-1" cx="18" cy="16" r="6" fill="#48b8d0"/>
-            <circle class="brand-node brand-leaf brand-leaf-2" cx="64" cy="14" r="6" fill="#48b8d0"/>
-            <circle class="brand-node brand-leaf brand-leaf-3" cx="12" cy="56" r="6" fill="#48b8d0"/>
-            <circle class="brand-node brand-leaf brand-leaf-4" cx="68" cy="58" r="6" fill="#48b8d0"/>
-            <circle class="brand-node brand-leaf brand-leaf-5" cx="40" cy="72" r="6" fill="#48b8d0"/>
-            <circle class="brand-pulse" cx="40" cy="40" r="10" fill="none" stroke="#5ba8ff" stroke-width="1.5"/>
+        <div id="brand-hub" class="brand" title="OmniDeck">
+          <svg class="brand-hub-svg" viewBox="0 0 48 48" width="34" height="34">
+            <g class="brand-arcs" fill="none" stroke-width="5.2" stroke-linecap="round">
+              <path class="brand-arc brand-arc-1" d="M19.61 38.34 A15 15 0 0 1 9.38 20.63" stroke="#3dd68c"/>
+              <path class="brand-arc brand-arc-2" d="M13.77 13.03 A15 15 0 0 1 34.23 13.03" stroke="#5c9ff2"/>
+              <path class="brand-arc brand-arc-3" d="M38.62 20.63 A15 15 0 0 1 28.39 38.34" stroke="#b18cf0"/>
+            </g>
           </svg>
         </div>
         <button type="button" id="accounts-scroll-up" class="btn btn-icon sidebar-scroll-btn hidden" title="Прокрутить вверх" aria-label="Прокрутить список аккаунтов вверх">
@@ -41,15 +34,13 @@
           <button type="button" id="add-account" class="btn btn-ghost add-account-btn" title="Добавить аккаунт">+</button>
           <div id="add-account-popover" class="add-account-popover hidden">
             <button type="button" class="add-account-option" data-type="whatsapp" title="WhatsApp">
-              <svg class="icon-wa-mini" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" fill="currentColor"/>
-                <path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.96 7.96 0 01-4.106-1.138l-.294-.176-2.868.852.852-2.868-.176-.294A7.96 7.96 0 014 12c0-4.411 3.589-8 8-8s8 3.589 8 8-3.589 8-8 8z" fill="currentColor"/>
-              </svg>
+              <svg class="icon-wa-mini" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
             </button>
             <button type="button" class="add-account-option" data-type="telegram" title="Telegram">
-              <svg class="icon-tg-mini" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.12.02-1.96 1.25-5.54 3.66-.52.36-1 .53-1.42.52-.47-.01-1.37-.27-2.04-.49-.82-.27-1.47-.42-1.42-.88.03-.24.37-.49 1.02-.75 3.98-1.73 6.64-2.88 7.97-3.44 3.8-1.58 4.59-1.86 5.1-1.87.11 0 .37.03.54.17.14.12.18.28.2.45-.01.06.01.24 0 .38z" fill="currentColor"/>
-              </svg>
+              <svg class="icon-tg-mini" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+            </button>
+            <button type="button" class="add-account-option" data-type="signal" title="Signal (уведомления через signal-cli)">
+              <svg class="icon-sig-mini" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0q-.934 0-1.83.139l.17 1.111a11 11 0 0 1 3.32 0l.172-1.111A12 12 0 0 0 12 0M9.152.34A12 12 0 0 0 5.77 1.742l.584.961a10.8 10.8 0 0 1 3.066-1.27zm5.696 0-.268 1.094a10.8 10.8 0 0 1 3.066 1.27l.584-.962A12 12 0 0 0 14.848.34M12 2.25a9.75 9.75 0 0 0-8.539 14.459c.074.134.1.292.064.441l-1.013 4.338 4.338-1.013a.62.62 0 0 1 .441.064A9.7 9.7 0 0 0 12 21.75c5.385 0 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25m-7.092.068a12 12 0 0 0-2.59 2.59l.909.664a11 11 0 0 1 2.345-2.345zm14.184 0-.664.909a11 11 0 0 1 2.345 2.345l.909-.664a12 12 0 0 0-2.59-2.59M1.742 5.77A12 12 0 0 0 .34 9.152l1.094.268a10.8 10.8 0 0 1 1.269-3.066zm20.516 0-.961.584a10.8 10.8 0 0 1 1.27 3.066l1.093-.268a12 12 0 0 0-1.402-3.383M.138 10.168A12 12 0 0 0 0 12q0 .934.139 1.83l1.111-.17A11 11 0 0 1 1.125 12q0-.848.125-1.66zm23.723.002-1.111.17q.125.812.125 1.66c0 .848-.042 1.12-.125 1.66l1.111.172a12.1 12.1 0 0 0 0-3.662M1.434 14.58l-1.094.268a12 12 0 0 0 .96 2.591l-.265 1.14 1.096.255.36-1.539-.188-.365a10.8 10.8 0 0 1-.87-2.35m21.133 0a10.8 10.8 0 0 1-1.27 3.067l.962.584a12 12 0 0 0 1.402-3.383zm-1.793 3.848a11 11 0 0 1-2.345 2.345l.664.909a12 12 0 0 0 2.59-2.59zm-19.959 1.1L.357 21.48a1.8 1.8 0 0 0 2.162 2.161l1.954-.455-.256-1.095-1.953.455a.675.675 0 0 1-.81-.81l.454-1.954zm16.832 1.769a10.8 10.8 0 0 1-3.066 1.27l.268 1.093a12 12 0 0 0 3.382-1.402zm-10.94.213-1.54.36.256 1.095 1.139-.266c.814.415 1.683.74 2.591.961l.268-1.094a10.8 10.8 0 0 1-2.35-.869zm3.634 1.24-.172 1.111a12.1 12.1 0 0 0 3.662 0l-.17-1.111q-.812.125-1.66.125a11 11 0 0 1-1.66-.125"/></svg>
             </button>
           </div>
         </div>
@@ -117,6 +108,13 @@
               </svg>
               <span class="btn-toolbar-label">Голосовое</span>
             </button>
+            <button type="button" id="toggle-split" class="btn btn-icon btn-toolbar-icon btn-toolbar-expand" title="Браузер в боковой панели">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="16" rx="2"/>
+                <line x1="14" y1="4" x2="14" y2="20"/>
+              </svg>
+              <span class="btn-toolbar-label">Браузер</span>
+            </button>
             </div>
           </div>
           <div id="weather-widget" class="weather-widget">
@@ -134,7 +132,7 @@
             <span id="toolbar-clock-time" class="toolbar-clock-time">--:--</span>
           </div>
           <div class="toolbar-right">
-            <div id="active-account-display" class="active-account-display" title="Активный WhatsApp">Нет активного WhatsApp</div>
+            <div id="active-account-display" class="active-account-display" title="Активный аккаунт">Нет активного аккаунта</div>
             <div class="zoom-control">
               <button type="button" id="zoom-out" class="btn btn-icon btn-toolbar-icon btn-zoom" title="Уменьшить масштаб" aria-label="Уменьшить масштаб">
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>
@@ -178,7 +176,7 @@
           <div id="hub-screen" class="hub-screen hidden" aria-hidden="true">
             <div id="hub-overlay" class="hub-overlay">
               <div id="hub-greeting" class="hub-greeting"></div>
-              <div id="hub-title" class="hub-title">WA Deck</div>
+              <div id="hub-title" class="hub-title">OmniDeck</div>
               <div id="hub-clocks" class="hub-clocks"></div>
               <div id="hub-tabs" class="hub-filters hub-tabs" role="tablist">
                 <button type="button" id="hub-tab-accounts" class="hub-filter-chip active" role="tab" title="Все аккаунты">Аккаунты</button>
@@ -195,6 +193,45 @@
             </div>
           </div>
         </section>
+        <aside id="split-pane" class="split-pane" aria-label="Встроенный браузер">
+          <div id="split-divider" class="split-divider" title="Потянуть для изменения ширины"></div>
+          <div class="split-bar">
+            <button type="button" id="split-back" class="btn btn-icon split-btn" title="Назад" aria-label="Назад">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            <button type="button" id="split-forward" class="btn btn-icon split-btn" title="Вперёд" aria-label="Вперёд">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+            <button type="button" id="split-home" class="btn btn-icon split-btn" title="Пустая страница" aria-label="Пустая страница">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
+            </button>
+            <button type="button" id="split-reload" class="btn btn-icon split-btn" title="Обновить" aria-label="Обновить">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>
+            </button>
+            <input type="text" id="split-url" class="split-url" placeholder="Адрес или поиск..." spellcheck="false" autocomplete="off" />
+            <button type="button" id="split-translate" class="btn btn-icon split-btn" title="Перевести страницу на русский" aria-label="Перевести страницу на русский">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>
+            </button>
+            <button type="button" id="split-open-ext" class="btn btn-icon split-btn" title="Открыть во внешнем браузере" aria-label="Открыть во внешнем браузере">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
+            </button>
+            <button type="button" id="split-close" class="btn btn-icon split-btn" title="Закрыть панель" aria-label="Закрыть панель">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div id="split-view-host" class="split-view-host">
+            <div id="split-start" class="split-start">
+              <div class="split-start-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 4 9 15 15 0 0 1-4 9 15 15 0 0 1-4-9 15 15 0 0 1 4-9z"/></svg>
+              </div>
+              <div class="split-start-sub">Куда пойдём?</div>
+              <div class="split-start-field">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                <input type="text" id="split-start-input" placeholder="Поиск или адрес сайта" spellcheck="false" autocomplete="off" />
+              </div>
+            </div>
+          </div>
+        </aside>
       </main>
 
       <aside id="panel" class="panel hidden">
@@ -321,7 +358,7 @@
 
           <div class="settings-group-label">О приложении</div>
           <div class="settings-about">
-            <div class="settings-about-line">WA Deck · <span id="about-app-version">—</span></div>
+            <div class="settings-about-line">OmniDeck · <span id="about-app-version">—</span></div>
             <div class="settings-about-line">Electron <span id="about-electron-version">—</span> · Chromium <span id="about-chromium-version">—</span></div>
             <div class="settings-about-status"><span class="settings-status-dot"></span><span>Готово к работе</span></div>
           </div>
@@ -547,7 +584,7 @@
             </select>
           </label>
           <button type="button" id="wsettings-refresh" class="btn full">Обновить сейчас</button>
-          <div class="hint">Изменения сохраняются автоматически. Погода показывается в тулбаре сверху и обновляется раз в 30 минут.</div>
+          <div class="hint">Изменения сохраняются автоматически. Погода показывается в тулбаре сверху и обновляется раз в 10 минут.</div>
         </details>
         </section>
 

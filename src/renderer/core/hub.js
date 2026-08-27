@@ -1,6 +1,7 @@
 /* Hub dashboard: greeting, clocks, filters, account cards, hub actions and
    the toolbar clock tooltip. Extracted verbatim from renderer.js. */
 import { state, els } from './state.js';
+import { brandIconSvg } from './brand-icons.js';
 import { setActiveAccount, addAccount } from './accounts.js';
 import { openSettingsPanel, closeSettingsPanel } from './settings.js';
 
@@ -228,7 +229,7 @@ function updateHubGreeting() {
   dateSpan.textContent = '· ' + dateStr;
   el.append(iconSpan, textSpan, dateSpan);
 
-  // Motivational hub-title swap — active 23:00–08:59, plain "WA Deck" otherwise.
+  // Motivational hub-title swap — active 23:00–08:59, plain "OmniDeck" otherwise.
   // The phrase is cached per hour bucket: updateHubDashboard() runs every few
   // seconds, and re-rolling the phrase each time made the title flicker.
   const titleEl = document.getElementById('hub-title');
@@ -245,7 +246,7 @@ function updateHubGreeting() {
       titleEl.textContent = _hubMotivationCache.phrase;
       titleEl.classList.add('hub-title--motivation');
     } else {
-      titleEl.textContent = 'WA Deck';
+      titleEl.textContent = 'OmniDeck';
       titleEl.classList.remove('hub-title--motivation');
     }
   }
@@ -314,7 +315,7 @@ async function updateHubDashboard() {
     avWrap.className = 'hub-acct-av';
     avWrap.style.background = account.color || 'var(--bg-3)';
     avWrap.style.setProperty('--tile', account.color || '#8a93a6');
-    const labelText = (account.name || '').split(' ')[0].slice(0, 2).toUpperCase() || (account.type === 'telegram' ? 'TG' : 'WA');
+    const labelText = (account.name || '').split(' ')[0].slice(0, 2).toUpperCase() || (account.type === 'telegram' ? 'TG' : (account.type === 'signal' ? 'SG' : 'WA'));
     avWrap.textContent = labelText;
     if (account.frozen) {
       const status = document.createElement('span');
@@ -346,8 +347,8 @@ async function updateHubDashboard() {
     const row3 = document.createElement('div');
     row3.className = 'hub-acct-row3';
     const typeTag = document.createElement('span');
-    typeTag.className = 'hub-acct-tag hub-acct-tag-' + (account.type === 'telegram' ? 'blue' : 'accent');
-    typeTag.textContent = account.type === 'telegram' ? 'Telegram' : 'WhatsApp';
+    typeTag.className = 'hub-acct-tag hub-acct-tag-' + (account.type === 'telegram' ? 'blue' : (account.type === 'signal' ? 'violet' : 'accent'));
+    typeTag.textContent = account.type === 'telegram' ? 'Telegram' : (account.type === 'signal' ? 'Signal' : 'WhatsApp');
     row3.appendChild(typeTag);
     if (account.frozen) {
       const t = document.createElement('span');
@@ -398,7 +399,7 @@ async function updateHubDashboard() {
   addWaBtn.type = 'button';
   addWaBtn.title = 'Добавить WhatsApp-аккаунт';
   addWaBtn.setAttribute('aria-label', 'Добавить WhatsApp-аккаунт');
-  addWaBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg> Добавить WhatsApp';
+  addWaBtn.innerHTML = brandIconSvg('whatsapp', { size: 13, color: 'currentColor' }) + ' Добавить WhatsApp';
   addWaBtn.addEventListener('click', () => addAccount('whatsapp'));
 
   const addTgBtn = document.createElement('button');
@@ -406,8 +407,16 @@ async function updateHubDashboard() {
   addTgBtn.type = 'button';
   addTgBtn.title = 'Добавить Telegram-аккаунт';
   addTgBtn.setAttribute('aria-label', 'Добавить Telegram-аккаунт');
-  addTgBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2AABEE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg> Добавить Telegram';
+  addTgBtn.innerHTML = brandIconSvg('telegram', { size: 13, color: '#2AABEE' }) + ' Добавить Telegram';
   addTgBtn.addEventListener('click', () => addAccount('telegram'));
+
+  const addSgBtn = document.createElement('button');
+  addSgBtn.className = 'btn btn-ghost hub-action-btn hub-action-sig';
+  addSgBtn.type = 'button';
+  addSgBtn.title = 'Добавить Signal-аккаунт (уведомления через signal-cli)';
+  addSgBtn.setAttribute('aria-label', 'Добавить Signal-аккаунт');
+  addSgBtn.innerHTML = brandIconSvg('signal', { size: 13, color: '#3A76F0' }) + ' Добавить Signal';
+  addSgBtn.addEventListener('click', () => addAccount('signal'));
 
   const settingsBtn = document.createElement('button');
   settingsBtn.className = 'btn btn-ghost hub-action-btn hub-action-settings';
@@ -416,7 +425,7 @@ async function updateHubDashboard() {
   settingsBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
   settingsBtn.addEventListener('click', () => { if (state.panelHidden) openSettingsPanel(); else closeSettingsPanel(); });
 
-  actions.append(addWaBtn, addTgBtn, settingsBtn);
+  actions.append(addWaBtn, addTgBtn, addSgBtn, settingsBtn);
   actionsHost.appendChild(actions);
 
 }

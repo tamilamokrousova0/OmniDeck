@@ -20,6 +20,7 @@ import {
   setAccountPinnedState,
 } from './account-menu.js';
 import { WaDeckUnreadModule } from '../unread.js';
+import { brandIconSvg } from './brand-icons.js';
 import { WaDeckScheduleModule } from '../schedule.js';
 
 function activeAccount() {
@@ -30,8 +31,8 @@ function updateActiveAccountDisplay() {
   if (!els.activeAccountDisplay) return;
   const account = activeAccount();
   if (!account) {
-    els.activeAccountDisplay.textContent = 'Нет активного WhatsApp';
-    els.activeAccountDisplay.title = 'Нет активного WhatsApp';
+    els.activeAccountDisplay.textContent = 'Нет активного аккаунта';
+    els.activeAccountDisplay.title = 'Нет активного аккаунта';
     els.activeAccountDisplay.classList.add('is-empty');
     return;
   }
@@ -44,7 +45,7 @@ function updateActiveAccountDisplay() {
 function updateToolbarState() {
   const account = activeAccount();
   const hasActive = Boolean(account);
-  const isWa = hasActive && account.type !== 'telegram';
+  const isWa = hasActive && account.type === 'whatsapp';
   // Кнопка обновления активна и в хабе (нет активного аккаунта) — там она
   // обновляет ВСЕ аккаунты; дизейблим только когда аккаунтов нет вовсе.
   if (els.refreshActive) els.refreshActive.disabled = !(state.accounts && state.accounts.length);
@@ -156,13 +157,14 @@ function updateAccountCardStatus(accountId) {
   if (tooltip) {
     let tooltipStatus = '';
     if (account.frozen) { tooltipStatus = 'Заморожен ❄'; }
+    else if (account.type === 'signal') { tooltipStatus = 'Приём через signal-cli'; }
     else {
       const wv = state.webviews.get(account.id);
       if (!wv) tooltipStatus = 'Не подключён';
       else if (wv.dataset?.waReady === '1') tooltipStatus = 'Подключён';
       else tooltipStatus = 'Загрузка…';
     }
-    const typeLabel = account.type === 'telegram' ? 'Telegram' : 'WhatsApp';
+    const typeLabel = account.type === 'telegram' ? 'Telegram' : (account.type === 'signal' ? 'Signal' : 'WhatsApp');
     tooltip.textContent = account.name + ' — ' + typeLabel + ' — ' + tooltipStatus;
   }
 }
@@ -275,14 +277,18 @@ function renderAccounts() {
     // Account type badge (WhatsApp / Telegram)
     const typeBadge = document.createElement('div');
     typeBadge.className = 'account-type-badge';
-    if (account.type === 'telegram') {
+    if (account.type === 'signal') {
+      typeBadge.classList.add('account-type-sig');
+      typeBadge.title = 'Signal';
+      typeBadge.innerHTML = brandIconSvg('signal', { color: '#fff' });
+    } else if (account.type === 'telegram') {
       typeBadge.classList.add('account-type-tg');
       typeBadge.title = 'Telegram';
-      typeBadge.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.07-.2c-.08-.06-.19-.04-.27-.02-.12.02-1.96 1.25-5.54 3.66-.52.36-1 .53-1.42.52-.47-.01-1.37-.27-2.04-.49-.82-.27-1.47-.42-1.42-.88.03-.24.37-.49 1.02-.75 3.98-1.73 6.64-2.88 7.97-3.44 3.8-1.58 4.59-1.86 5.1-1.87.11 0 .37.03.54.17.14.12.18.28.2.45-.01.06.01.24 0 .38z" fill="white"/></svg>';
+      typeBadge.innerHTML = brandIconSvg('telegram', { color: '#fff' });
     } else {
       typeBadge.classList.add('account-type-wa');
       typeBadge.title = 'WhatsApp';
-      typeBadge.innerHTML = '<svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" fill="white"/><path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.96 7.96 0 01-4.106-1.138l-.294-.176-2.868.852.852-2.868-.176-.294A7.96 7.96 0 014 12c0-4.411 3.589-8 8-8s8 3.589 8 8-3.589 8-8 8z" fill="white"/></svg>';
+      typeBadge.innerHTML = brandIconSvg('whatsapp', { color: '#fff' });
     }
     card.appendChild(typeBadge);
 
@@ -303,13 +309,15 @@ function renderAccounts() {
     let tooltipStatus = '';
     if (account.frozen) {
       tooltipStatus = 'Заморожен ❄';
+    } else if (account.type === 'signal') {
+      tooltipStatus = 'Приём через signal-cli';
     } else {
       const wv = state.webviews.get(account.id);
       if (!wv) tooltipStatus = 'Не подключён';
       else if (wv.dataset?.waReady === '1') tooltipStatus = 'Подключён';
       else tooltipStatus = 'Загрузка…';
     }
-    const typeLabel = account.type === 'telegram' ? 'Telegram' : 'WhatsApp';
+    const typeLabel = account.type === 'telegram' ? 'Telegram' : (account.type === 'signal' ? 'Signal' : 'WhatsApp');
     tooltip.textContent = account.name + ' — ' + typeLabel + ' — ' + tooltipStatus;
     card.appendChild(tooltip);
 
@@ -514,12 +522,24 @@ function _setActiveAccountInner(accountId) {
     }
   }
   if (nextId && state.startupHubVisible) {
+    // Signal-аккаунту грузить нечего (нет webview) — хаб прячем сразу, иначе
+    // «выбрал Signal при первом запуске — ничего не показалось»
+    const acct = accountById(nextId);
+    if (acct?.type === 'signal') {
+      state.startupHubVisible = false;
+      if (state.startupHubTimeoutId) {
+        clearTimeout(state.startupHubTimeoutId);
+        state.startupHubTimeoutId = null;
+      }
+    }
     const webview = state.webviews.get(nextId);
     // webview.isLoading() throws on a freshly-created webview until dom-ready
     // has fired. Treat "not-yet-ready" as "still loading" and only trust a
     // clean false (finished loading) to hide the startup hub.
     let stillLoading = true;
-    if (webview && webview.dataset?.waReady === '1') {
+    if (webview) {
+      // Без гейта на waReady: упавшая первичная загрузка оставляла хаб
+      // «залипшим» — isLoading() честно скажет false и для неё
       try {
         stillLoading = typeof webview.isLoading === 'function' && webview.isLoading();
       } catch { /* not attached yet — treat as loading */ }
@@ -596,7 +616,9 @@ async function removeAccount(accountId) {
 
   const relogin = account.type === 'telegram'
     ? 'для повторного входа потребуется заново авторизоваться'
-    : 'для повторного входа потребуется заново сканировать QR-код';
+    : (account.type === 'signal'
+      ? 'привязку устройства нужно будет пройти заново (и удалить старую в Signal на телефоне)'
+      : 'для повторного входа потребуется заново сканировать QR-код');
   const accepted = await showConfirm('Удаление аккаунта', `Удалить «${account.name}»?\nСессия будет удалена безвозвратно — ${relogin}.`, 'Удалить', { danger: true });
   if (!accepted) return;
 
@@ -612,6 +634,8 @@ async function removeAccount(accountId) {
     state.chatPickerCache = null;
   }
   state.unreadByAccount.delete(accountId);
+  state._hibernated?.delete(accountId); // иначе залипший is-hibernated + утечка
+  state.zoomByAccount?.delete(accountId);
   WaDeckUnreadModule.scheduleDockBadgeSync();
   // Favorites of the removed account were pruned in main too.
   if (window.WaDeckFavoritesModule) window.WaDeckFavoritesModule.onAccountRemoved(accountId);
@@ -640,6 +664,15 @@ async function removeAccount(accountId) {
 }
 
 function refreshActiveWebview() {
+  {
+    // Signal: webview нет — «обновить» перезапускает демон и контакты
+    const acc = activeAccount();
+    if (acc?.type === 'signal') {
+      window.WaDeckSignalPanel?.refreshAccount?.(acc.id);
+      setStatus(`${acc.name}: Signal перезапущен`);
+      return;
+    }
+  }
   const webview = selectedWebview();
   const account = activeAccount();
   if (!account) {

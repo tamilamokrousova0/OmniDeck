@@ -56,7 +56,7 @@ function whisperBinaryPath() {
   _binPathCache = candidates.find((p) => {
     if (!fsSync.existsSync(p)) return false;
     try {
-      const r = spawnSync(p, ['--help'], { timeout: 10000, windowsHide: true, cwd: path.dirname(p) });
+      const r = spawnSync(p, ['--help'], { timeout: 4000, windowsHide: true, cwd: path.dirname(p) });
       return r.status === 0;
     } catch {
       return false;
@@ -160,9 +160,41 @@ function voiceStatusScript(voiceId, text, kind) {
    blob-src, ставим на паузу и возвращаем громкость. Старый путь (audio в DOM)
    оставлен фолбэком для прежних ревизий разметки. Дальше — blob → 16kHz mono
    WAV, формат whisper-cli. */
-function voiceCaptureScript(voiceId) {
+function voiceCaptureScript(voiceId, kind) {
+  const isVideo = kind === 'video';
   return `(async () => {
-    const audios = () => Array.from(document.querySelectorAll('audio'));
+    const IS_VIDEO = ${isVideo ? 'true' : 'false'};
+    /* Видео mid-2026 отдаётся сервис-воркером по https://web.whatsapp.com/stream/…
+       (не blob!), причём Range-ответами по 1.5 МБ: без дочитывания получаем
+       половину дорожки. Голосовые остаются blob-ами. */
+    const isMediaSrc = (u) => {
+      const v = String(u || '');
+      return v.startsWith('blob:') || v.indexOf('/stream/') !== -1;
+    };
+    const fetchFull = async (u) => {
+      if (String(u).startsWith('blob:')) return await (await fetch(u)).arrayBuffer();
+      const first = await fetch(u, { headers: { Range: 'bytes=0-' } });
+      const cr = first.headers.get('content-range') || '';
+      const total = Number(cr.split('/')[1] || 0);
+      const parts = [new Uint8Array(await first.arrayBuffer())];
+      let got = parts[0].length;
+      let guard = 0;
+      while (total && got < total && guard++ < 80) {
+        const r = await fetch(u, { headers: { Range: 'bytes=' + got + '-' } });
+        const b = new Uint8Array(await r.arrayBuffer());
+        if (!b.length) break;
+        parts.push(b); got += b.length;
+      }
+      const all = new Uint8Array(got);
+      let off = 0;
+      for (const part of parts) { all.set(part, off); off += part.length; }
+      return all.buffer;
+    };
+    /* Для видео blob живёт на <video> (в пузыре или в медиа-вьюере),
+       глушим на всякий случай оба типа медиа. decodeAudioData Chromium
+       сам демуксит mp4 и берёт аудио-дорожку — конвейер ниже общий. */
+    const audios = () => Array.from(document.querySelectorAll(IS_VIDEO ? 'audio, video' : 'audio'));
+    const capTag = IS_VIDEO ? 'VIDEO' : 'AUDIO';
     const mutedByUs = [];
     const proto = HTMLMediaElement.prototype;
     const origPlay = proto.play;
@@ -173,9 +205,50 @@ function voiceCaptureScript(voiceId) {
       if (!row) return { ok: false, error: 'row_gone' };
 
       let src = null;
-      const rowAudio = row.querySelector('audio');
-      if (rowAudio && rowAudio.src && rowAudio.src.startsWith('blob:')) {
-        src = rowAudio.src; // уже проигрывалось — blob на месте, play не нужен
+      const rowAudio = row.querySelector(IS_VIDEO ? 'video' : 'audio');
+      if (rowAudio && isMediaSrc(rowAudio.src)) {
+        src = rowAudio.src; // уже проигрывалось — источник на месте, play не нужен
+      }
+
+      /* Прямой путь: полный ключ медиа лежит в локальной базе WhatsApp
+         (model-storage → store «message», ключи вида
+         false_<чат>@lid_<сообщение>). Берём его по id сообщения из разметки
+         и скачиваем файл у сервис-воркера — ничего не открывается и не
+         играет. Не вышло — ниже прежний путь с кликом по play. */
+      if (IS_VIDEO && !src) {
+        try {
+          const idEl = row.querySelector('[data-id]');
+          const msgId = idEl && idEl.getAttribute('data-id');
+          if (msgId) {
+            const fullKey = await new Promise((resolve) => {
+              let done = false;
+              const fin = (v) => { if (!done) { done = true; resolve(v); } };
+              setTimeout(() => fin(''), 2500); // база молчит — не ждём
+              try {
+                const req = indexedDB.open('model-storage');
+                req.onerror = () => fin('');
+                req.onsuccess = () => {
+                  const db = req.result;
+                  if (!db.objectStoreNames.contains('message')) { db.close(); return fin(''); }
+                  const st = db.transaction('message', 'readonly').objectStore('message');
+                  const q = st.getAllKeys();
+                  q.onsuccess = () => {
+                    const suffix = '_' + msgId;
+                    const hit = (q.result || []).map(String).find((k) => k.endsWith(suffix));
+                    db.close();
+                    fin(hit || '');
+                  };
+                  q.onerror = () => { db.close(); fin(''); };
+                };
+              } catch (_) { fin(''); }
+            });
+            if (fullKey) {
+              const direct = 'https://web.whatsapp.com/stream/video?key=' + fullKey;
+              const probe = await fetch(direct, { headers: { Range: 'bytes=0-1023' } });
+              if (probe.status === 206 || probe.ok) src = direct;
+            }
+          }
+        } catch (_) { /* ключ не нашёлся — обычный путь ниже */ }
       }
 
       if (!src) {
@@ -187,6 +260,8 @@ function voiceCaptureScript(voiceId) {
           if (!hooked.el) {
             hooked.el = this;
             hooked.vol = this.volume;
+            // в отслеживаемый набор — чтобы в finally элемент вернулся со звуком
+            if (!this.muted && mutedByUs.indexOf(this) === -1) mutedByUs.push(this);
             try { this.muted = true; this.volume = 0; } catch (_) {}
           }
           return origPlay.apply(this, args);
@@ -194,6 +269,18 @@ function voiceCaptureScript(voiceId) {
         hookInstalled = true;
 
         const playBtn = (() => {
+          if (IS_VIDEO) {
+            /* ТОЛЬКО media-play: у пузыря рядом лежит video-pip, и селектор
+               по *="video" жал именно его — видео уезжало в отдельное
+               «картинка-в-картинке» окно вместо инлайнового воспроизведения */
+            const vIcon = row.querySelector('span[data-icon="media-play"]')
+              || row.querySelector('span[data-icon*="ptv"]');
+            const viaV = vIcon && (vIcon.closest('button') || vIcon.closest('[role="button"]') || vIcon);
+            if (viaV) return viaV;
+            const notPip = [...row.querySelectorAll('button, [role="button"]')]
+              .find((b) => !b.querySelector('span[data-icon*="pip"]') && !/картинка|picture/i.test(b.getAttribute('aria-label') || ''));
+            return notPip || null;
+          }
           const icon = row.querySelector('span[data-icon*="audio-play"]');
           const viaIcon = icon && (icon.closest('button') || icon.closest('[role="button"]'));
           if (viaIcon) return viaIcon;
@@ -206,16 +293,24 @@ function voiceCaptureScript(voiceId) {
         playBtn.click();
 
         const deadline = Date.now() + ${CAPTURE_TIMEOUT_MS};
+        /* Через 6 с перестаём требовать «новый» источник: WhatsApp
+           переиспользует один <video> с тем же URL, и повторная расшифровка
+           того же ролика иначе ждала таймаут впустую. */
+        const relaxAt = Date.now() + 6000;
         while (!src && Date.now() < deadline) {
-          if (hooked.el) {
+          const relaxed = Date.now() > relaxAt;
+          if (hooked.el && (!IS_VIDEO || hooked.el.tagName === capTag)) {
             try { hooked.el.muted = true; } catch (_) {}
             const hs = String(hooked.el.src || '');
-            if (hs.startsWith('blob:')) { src = hs; break; }
+            if (isMediaSrc(hs)) { src = hs; break; }
           }
           for (const a of audios()) {
+            // Видео играет через autoplay, .play() не вызывается — hook его не
+            // ловит, поэтому глушим здесь, в цикле опроса
             if (!a.muted) { a.muted = true; mutedByUs.push(a); }
+            if (IS_VIDEO && a.tagName !== capTag) continue;
             const s = String(a.src || '');
-            if (s.startsWith('blob:') && (!before.has(s) || !a.paused)) {
+            if (isMediaSrc(s) && (relaxed || !before.has(s) || !a.paused)) {
               src = s;
               try { a.pause(); a.currentTime = 0; } catch (_) {}
               break;
@@ -232,16 +327,84 @@ function voiceCaptureScript(voiceId) {
         if (!src) return { ok: false, error: 'blob_not_found' };
       }
 
-      const buf = await (await fetch(src)).arrayBuffer();
       const dctx = new (window.AudioContext || window.webkitAudioContext)();
-      let decoded;
+      let decoded = null;
+      let captureMode = 'blob';
+      /* Быстрый путь: blob целиком. У видео WhatsApp это часто MediaSource —
+         fetch по такому blob-URL падает, тогда идём realtime-путём. */
       try {
-        decoded = await dctx.decodeAudioData(buf.slice(0));
-      } catch (decErr) {
-        return { ok: false, error: 'audio_decode_failed', detail: String(decErr && decErr.message || decErr) };
-      } finally {
-        dctx.close().catch(() => {});
+        const buf = await fetchFull(src);
+        if (buf.byteLength > 0) decoded = await dctx.decodeAudioData(buf.slice(0));
+      } catch (_) { decoded = null; }
+
+      if (!decoded && IS_VIDEO) {
+        /* Realtime-захват дорожки прямо с играющего элемента.
+           createMediaElementSource уводит звук из динамиков в наш граф —
+           поэтому запись идёт беззвучно и без mute-жонглирования. */
+        captureMode = 'realtime';
+        const el = [...document.querySelectorAll('video')].find((v) => String(v.src || '') === src)
+          || hooked.el
+          || document.querySelector('video');
+        if (!el) { dctx.close().catch(() => {}); return { ok: false, error: 'video_gone' }; }
+        try {
+          /* Долгоживущий контекст + WeakMap узлов: createMediaElementSource
+             можно вызвать на элементе лишь ОДИН раз (повтор — InvalidStateError),
+             а закрытый контекст оставил бы видео немым при обычном просмотре. */
+          if (!window.__waDeckTap) {
+            window.__waDeckTap = {
+              ctx: new (window.AudioContext || window.webkitAudioContext)(),
+              nodes: new WeakMap(),
+            };
+          }
+          const tap = window.__waDeckTap;
+          if (tap.ctx.state === 'suspended') { try { await tap.ctx.resume(); } catch (_) {} }
+          let node = tap.nodes.get(el);
+          if (!node) { node = tap.ctx.createMediaElementSource(el); tap.nodes.set(el, node); }
+          const dest = tap.ctx.createMediaStreamDestination();
+          try { node.disconnect(); } catch (_) {}
+          node.connect(dest); // НЕ в destination — иначе звук в колонки
+          const rec = new MediaRecorder(dest.stream);
+          const parts = [];
+          rec.ondataavailable = (e) => { if (e.data && e.data.size) parts.push(e.data); };
+          const stopped = new Promise((r) => { rec.onstop = r; });
+          try { el.muted = false; el.volume = 1; } catch (_) {} // граф уже увёл звук из динамиков
+          try { el.currentTime = 0; } catch (_) {}
+          rec.start();
+          try { await el.play(); } catch (_) {}
+          const dur = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 60;
+          const deadline2 = Date.now() + Math.min(dur * 1000 + 4000, ${CAPTURE_TIMEOUT_MS} * 12);
+          /* Живой прогресс прямо в плашке: realtime-запись идёт в темпе видео,
+             без этого минутный ролик выглядит как зависание */
+          const statusBox = row.querySelector(':scope .__wadeck-voice-tr');
+          const graceUntil = Date.now() + 2000; // дать плееру стартовать
+          while (Date.now() < deadline2 && !el.ended) {
+            if (Date.now() > graceUntil && el.paused) break; // не играет — ждать нечего
+            if (statusBox) {
+              const done = Math.min(dur, Math.max(0, el.currentTime || 0));
+              statusBox.textContent = '⏳ Слушаю видео… ' + Math.round(done) + '/' + Math.round(dur) + ' c';
+            }
+            await new Promise((r) => setTimeout(r, 250));
+          }
+          rec.stop();
+          await stopped;
+          try { el.pause(); } catch (_) {}
+          /* Возвращаем звук элемента в колонки: иначе после расшифровки
+             это видео проигрывалось бы немым */
+          try { node.disconnect(); node.connect(tap.ctx.destination); } catch (_) {}
+          const blob = new Blob(parts);
+          const buf2 = await blob.arrayBuffer();
+          if (buf2.byteLength > 0) decoded = await dctx.decodeAudioData(buf2.slice(0));
+        } catch (recErr) {
+          dctx.close().catch(() => {});
+          return { ok: false, error: 'audio_decode_failed', detail: String(recErr && recErr.message || recErr) };
+        }
       }
+
+      if (!decoded) {
+        dctx.close().catch(() => {});
+        return { ok: false, error: 'audio_decode_failed' };
+      }
+      dctx.close().catch(() => {});
 
       const rate = 16000;
       /* Тишина по краям (0.25с + 1с): whisper склонен ронять последнее слово,
@@ -256,6 +419,13 @@ function voiceCaptureScript(voiceId) {
       const rendered = await octx.startRendering();
       const pcm = rendered.getChannelData(0);
 
+      /* Нормализация: видео с телефона часто тихие (пик ~0.1), whisper на
+         таком уровне глохнет. Поднимаем пик до 0.9, но не больше ×12 —
+         иначе вытягиваем один шум. */
+      let peak = 0;
+      for (let i = 0; i < pcm.length; i++) { const a = Math.abs(pcm[i]); if (a > peak) peak = a; }
+      const gain = (peak > 0.0005 && peak < 0.9) ? Math.min(0.9 / peak, 12) : 1;
+
       const wav = new ArrayBuffer(44 + pcm.length * 2);
       const dv = new DataView(wav);
       const wstr = (off, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(off + i, s.charCodeAt(i)); };
@@ -265,7 +435,7 @@ function voiceCaptureScript(voiceId) {
       dv.setUint32(28, rate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
       wstr(36, 'data'); dv.setUint32(40, pcm.length * 2, true);
       for (let i = 0; i < pcm.length; i++) {
-        const s = Math.max(-1, Math.min(1, pcm[i]));
+        const s = Math.max(-1, Math.min(1, pcm[i] * gain));
         dv.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
       }
 
@@ -278,7 +448,7 @@ function voiceCaptureScript(voiceId) {
       for (let i = 0; i < bytes.length; i += CHUNK) {
         b64 += btoa(String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK)));
       }
-      return { ok: true, wav: b64, duration: decoded.duration };
+      return { ok: true, wav: b64, duration: decoded.duration, mode: captureMode };
     } catch (err) {
       return { ok: false, error: String(err && err.message || err) };
     } finally {
@@ -289,7 +459,37 @@ function voiceCaptureScript(voiceId) {
         try { hooked.el.pause(); hooked.el.currentTime = 0; } catch (_) {}
         try { hooked.el.muted = false; hooked.el.volume = hooked.vol; } catch (_) {}
       }
-      for (const a of mutedByUs) { try { a.muted = false; } catch (_) {} }
+      /* Видео/аудио, которое мы запускали ради захвата, обязательно
+         останавливаем: элемент играет autoplay-ом и иначе доиграет вслух */
+      if (IS_VIDEO) {
+        /* Плеер WhatsApp — React-компонент: императивный pause() он
+           переигрывает обратно. Останавливаем через ЕГО кнопку паузы
+           (data-icon video-pause / aria-label «Пауза»), pause() — фолбэк. */
+        try {
+          const pauseBtn = document.querySelector('span[data-icon="video-pause"]');
+          const btn = pauseBtn && (pauseBtn.closest('button') || pauseBtn.closest('[role="button"]'));
+          if (btn) btn.click();
+        } catch (_) {}
+        for (const v of document.querySelectorAll('video')) {
+          try { if (!v.paused) { v.pause(); } } catch (_) {}
+          /* НЕ мьютим насовсем: раньше после расшифровки ВСЕ видео чата
+             оставались немыми и пользователь смотрел их без звука */
+          if (mutedByUs.indexOf(v) === -1) { try { v.muted = false; } catch (_) {} }
+        }
+        await new Promise((r) => setTimeout(r, 250));
+        /* Контрольный проход: если React успел вернуть воспроизведение */
+        try {
+          const again = document.querySelector('span[data-icon="video-pause"]');
+          const btn2 = again && (again.closest('button') || again.closest('[role="button"]'));
+          if (btn2) btn2.click();
+        } catch (_) {}
+      }
+      /* Сначала пауза, потом размьют — иначе элемент, который мы замьютили,
+         но не остановили, начинает звучать на всё время работы whisper */
+      for (const a of mutedByUs) {
+        try { if (!a.paused) { a.pause(); a.currentTime = 0; } } catch (_) {}
+        try { a.muted = false; } catch (_) {}
+      }
     }
   })();`;
 }
@@ -302,7 +502,7 @@ async function setStatus(contents, voiceId, text, kind) {
   } catch { /* webview мог перезагрузиться — статус не критичен */ }
 }
 
-async function downloadModel(contents, voiceId) {
+async function downloadModel(contents, voiceId, onProgress) {
   if (_modelDownloadPromise) return _modelDownloadPromise;
   _modelDownloadPromise = (async () => {
     const dest = modelPath();
@@ -325,6 +525,7 @@ async function downloadModel(contents, voiceId) {
         if (pct >= lastShown + 5) {
           lastShown = pct;
           await setStatus(contents, voiceId, `⏳ Загрузка модели распознавания… ${pct}%`);
+          try { onProgress?.(pct); } catch { /* ignore */ }
         }
       }
     } finally {
@@ -336,7 +537,7 @@ async function downloadModel(contents, voiceId) {
   return _modelDownloadPromise;
 }
 
-async function ensureModel(contents, voiceId, parentWindow) {
+async function ensureModel(contents, voiceId, parentWindow, onProgress) {
   if (modelReady()) return true;
   const { response } = await dialog.showMessageBox(parentWindow, {
     type: 'question',
@@ -348,14 +549,22 @@ async function ensureModel(contents, voiceId, parentWindow) {
     detail: 'Скачивается один раз, работает полностью локально — аудио никуда не отправляется.',
   });
   if (response !== 0) return false;
-  await downloadModel(contents, voiceId);
+  await downloadModel(contents, voiceId, onProgress);
   return true;
+}
+
+let _whisperChild = null; // чтобы не оставить процесс на всех ядрах после выхода
+
+function killWhisper() {
+  try { _whisperChild?.kill('SIGKILL'); } catch { /* ignore */ }
+  _whisperChild = null;
 }
 
 function runWhisper(binPath, wavPath) {
   return new Promise((resolve, reject) => {
     const args = ['-m', modelPath(), '-f', wavPath, '-l', 'auto', '-nt', '-np', '-t', String(WHISPER_THREADS)];
     const child = spawn(binPath, args, { cwd: path.dirname(binPath), windowsHide: true });
+    _whisperChild = child;
     let out = '';
     let errOut = '';
     const killTimer = setTimeout(() => {
@@ -367,6 +576,7 @@ function runWhisper(binPath, wavPath) {
     child.on('error', (err) => { clearTimeout(killTimer); reject(err); });
     child.on('close', (code) => {
       clearTimeout(killTimer);
+      _whisperChild = null;
       if (code !== 0) {
         reject(new Error(`whisper exit ${code}: ${errOut.slice(-300)}`));
         return;
@@ -376,11 +586,23 @@ function runWhisper(binPath, wavPath) {
   });
 }
 
+/* Whisper на музыке/шуме галлюцинирует текстом в случайной письменности
+   (видели сингальский на клипе с музыкой). Отсекаем: если букв «чужих»
+   алфавитов больше половины — это не речь наших собеседников.
+   Компромисс осознанный: настоящее сообщение на китайском/арабском тоже
+   не покажем — но лучше честное «не распознано», чем абракадабра. */
+function looksLikeNoise(text) {
+  const letters = [...String(text || '')].filter((ch) => /\p{L}/u.test(ch));
+  if (letters.length < 4) return false;
+  const known = letters.filter((ch) => /[\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Greek}]/u.test(ch)).length;
+  return known / letters.length < 0.5;
+}
+
 /**
  * Полный флоу по клику меню. Ошибки показываются плашкой у пузыря,
  * наружу не бросаются.
  */
-async function transcribeVoiceAt(contents, voiceId, parentWindow) {
+async function transcribeVoiceAt(contents, voiceId, parentWindow, kind = 'voice') {
   if (_busy) {
     await setStatus(contents, voiceId, 'Уже идёт другая расшифровка — повторите позже', 'error');
     return;
@@ -396,14 +618,15 @@ async function transcribeVoiceAt(contents, voiceId, parentWindow) {
     }
     if (!(await ensureModel(contents, voiceId, parentWindow))) return;
 
-    await setStatus(contents, voiceId, '⏳ Получаю аудио…');
-    const captured = await contents.executeJavaScript(voiceCaptureScript(voiceId));
+    const isVideo = kind === 'video';
+    await setStatus(contents, voiceId, isVideo ? '⏳ Получаю аудио из видео…' : '⏳ Получаю аудио…');
+    const captured = await contents.executeJavaScript(voiceCaptureScript(voiceId, kind));
     if (!captured?.ok) {
       const reasons = {
         row_gone: 'Сообщение исчезло из чата — откройте его и попробуйте снова',
-        play_button_not_found: 'Не нашёл кнопку воспроизведения у голосового',
-        blob_not_found: 'Не удалось получить аудио (WhatsApp не отдал файл)',
-        audio_decode_failed: 'Не удалось декодировать аудио',
+        play_button_not_found: isVideo ? 'Не нашёл кнопку воспроизведения у видео' : 'Не нашёл кнопку воспроизведения у голосового',
+        blob_not_found: isVideo ? 'Не удалось получить видео (WhatsApp не отдал файл)' : 'Не удалось получить аудио (WhatsApp не отдал файл)',
+        audio_decode_failed: isVideo ? 'Не удалось извлечь аудио-дорожку из видео' : 'Не удалось декодировать аудио',
       };
       await setStatus(contents, voiceId,
         reasons[captured?.error] || `Ошибка захвата: ${captured?.error || 'unknown'}`, 'error');
@@ -413,12 +636,21 @@ async function transcribeVoiceAt(contents, voiceId, parentWindow) {
     await fs.writeFile(wavPath, Buffer.from(captured.wav, 'base64'));
     await setStatus(contents, voiceId,
       `⏳ Расшифровка (${Math.round(captured.duration)} c аудио)…`);
+    if (captured.mode === 'realtime') {
+      console.log('[voice-transcribe] video captured in realtime mode (MSE)');
+    }
     const text = await runWhisper(binPath, wavPath);
     if (!text) {
       await setStatus(contents, voiceId, 'Речь не распознана (пустой результат)', 'error');
       return;
     }
-    await setStatus(contents, voiceId, `🎤 ${text}`, 'final');
+    if (looksLikeNoise(text)) {
+      await setStatus(contents, voiceId,
+        isVideo ? 'Речь не распознана — похоже, в видео только музыка или шум'
+          : 'Речь не распознана — похоже, только музыка или шум', 'error');
+      return;
+    }
+    await setStatus(contents, voiceId, `${kind === 'video' ? '🎬' : '🎤'} ${text}`, 'final');
   } catch (err) {
     console.error('[voice-transcribe]', err);
     await setStatus(contents, voiceId,
@@ -429,4 +661,30 @@ async function transcribeVoiceAt(contents, voiceId, parentWindow) {
   }
 }
 
-module.exports = { transcribeVoiceAt, whisperBinaryPath, modelReady, cleanupStaleModels };
+/* Транскрибация готового 16кГц WAV (декодирует renderer): Signal-вложения.
+   Прогресс рисует вызывающая сторона, сюда — только результат/ошибка. */
+async function transcribeWavBase64(wavB64, parentWindow, onProgress) {
+  if (_busy) return { ok: false, error: 'busy' };
+  _busy = true;
+  const wavPath = path.join(app.getPath('temp'), `wadeck-voice-${Date.now()}.wav`);
+  try {
+    const binPath = whisperBinaryPath();
+    if (!binPath) return { ok: false, error: 'no_whisper' };
+    // contents=null: setStatus у webview-плашки безопасно no-op'ит (try/catch),
+    // прогресс модели уводим в колбэк — иначе Signal-кнопка молча висит ⏳
+    if (!(await ensureModel(null, '', parentWindow, onProgress))) return { ok: false, error: 'model_declined' };
+    const buf = Buffer.from(String(wavB64 || ''), 'base64');
+    if (buf.length < 100) return { ok: false, error: 'empty_wav' };
+    await fs.writeFile(wavPath, buf);
+    const text = await runWhisper(binPath, wavPath);
+    if (!text) return { ok: false, error: 'no_speech' };
+    return { ok: true, text };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err).slice(0, 200) };
+  } finally {
+    _busy = false;
+    fs.unlink(wavPath).catch(() => {});
+  }
+}
+
+module.exports = { transcribeVoiceAt, transcribeWavBase64, whisperBinaryPath, modelReady, cleanupStaleModels, killWhisper };

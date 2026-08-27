@@ -1,6 +1,6 @@
-# WA Deck
+# OmniDeck (ранее WA Deck)
 
-Electron-приложение с WhatsApp Web, мульти-аккаунтами, переводом и отложенной отправкой.
+Electron-«дека» для WhatsApp, Telegram и Signal: мульти-аккаунты, перевод, отложенная отправка, CRM.
 
 ## Локальный запуск
 
@@ -33,7 +33,7 @@ npm run dist:all
 
 ## Автообновление через GitHub Releases
 
-В проекте включён `electron-updater` с `publish.provider = github` (`tamilamokrousova0/WA-Deck`).
+В проекте включён `electron-updater` с `publish.provider = github` (`tamilamokrousova0/OmniDeck`).
 
 Как работает:
 - в упакованной версии приложение один раз проверяет обновления через ~30 секунд после старта (и всегда — по кнопке в настройках);
@@ -56,7 +56,7 @@ npm run dist:all
 
 Подпись включается **наличием секретов в GitHub Actions** — без них сборки остаются
 неподписанными и всё работает как раньше (на macOS первый запуск скачанного DMG
-требует снять карантин: `xattr -dr com.apple.quarantine "/Applications/WA Deck.app"`).
+требует снять карантин: `xattr -dr com.apple.quarantine "/Applications/OmniDeck.app" (для старых установок — "WA Deck.app")`).
 
 ### macOS (нужен Apple Developer Program, $99/год)
 

@@ -93,7 +93,7 @@ import { showToast } from './core/helpers.js';
       };
       for (const [accountId, imps] of byAccount) {
         const acc = accountById(accountId);
-        if (!acc || acc.type === 'telegram' || acc.frozen) { carry(imps); continue; }
+        if (!acc || acc.type !== 'whatsapp' || acc.frozen) { carry(imps); continue; }
         const webview = state.webviews.get(accountId);
         if (!isWebviewReady(webview)) { carry(imps); continue; }
         let rows = null;

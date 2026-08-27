@@ -48,18 +48,22 @@ import { state } from './core/state.js';
   async function scanAccountUnread(accountId, webview, exec) {
     const key = String(accountId || '');
     const cached = _scanCache.get(key);
-    if (cached && (Date.now() - cached.t) < SCAN_TTL_MS) return cached.rows;
+    // Кэшируем ПРОМИС: три модуля (pin-feed/unread-feed/Cmd+U) сканируют
+    // одновременно, и кэш результата их не дедуплицировал — инъекции шли втрое
+    if (cached && (Date.now() - cached.t) < SCAN_TTL_MS) return cached.p;
     const titleCount = Number(state?.unreadByAccount?.get?.(key));
     if (titleCount === 0 && (Date.now() - (_lastFullScanAt.get(key) || 0)) < ZERO_RECON_MS) {
       return [];
     }
-    let rows = null;
-    try { rows = await exec(webview, collectUnreadChatsScript(), true); } catch { rows = null; }
-    if (Array.isArray(rows)) {
-      _scanCache.set(key, { t: Date.now(), rows });
-      _lastFullScanAt.set(key, Date.now());
-    }
-    return rows;
+    const p = (async () => {
+      let rows = null;
+      try { rows = await exec(webview, collectUnreadChatsScript(), true); } catch { rows = null; }
+      if (Array.isArray(rows)) _lastFullScanAt.set(key, Date.now());
+      else _scanCache.delete(key); // неудачу не кэшируем
+      return rows;
+    })();
+    _scanCache.set(key, { t: Date.now(), p });
+    return p;
   }
 
   function catRank(c) { return c === 'imp' ? 0 : 1; }
@@ -199,7 +203,9 @@ import { state } from './core/state.js';
     // The row exists only while something is actually new — otherwise it
     // collapses (its grid track shrinks to 0), keeping the UI uncluttered.
     if (!unread.length) {
-      feed.classList.add('hidden');
+      // не .hidden: глобальный display:none!important убивал transition высоты
+      feed.classList.remove('hidden');
+      feed.classList.add('is-collapsed');
       closePop();
       track.innerHTML = '';
       if (pop) pop.innerHTML = '';
@@ -207,7 +213,7 @@ import { state } from './core/state.js';
       return;
     }
 
-    feed.classList.remove('hidden');
+    feed.classList.remove('hidden', 'is-collapsed');
 
     track.innerHTML = '';
     const frag = document.createDocumentFragment();

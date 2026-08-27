@@ -3,6 +3,7 @@
 import { state, els } from './state.js';
 import {
   setStatus,
+  showToast,
   trimMapSize,
   runWithBusyButton,
   showConfirm,
@@ -25,6 +26,7 @@ import {
   safeExecuteInWebview,
   sendWebviewInput,
   insertTextIntoActiveChat,
+  humanTypePaste,
   applyHibernationSetting,
   applyZoom,
 } from './webviews.js';
@@ -91,6 +93,9 @@ async function init() {
   WaDeckImportantModule.init({ ...moduleCtx, setActiveAccount, isWebviewReady, safeExecuteInWebview });
   window.WaDeckUnreadFeed?.init?.({ ...moduleCtx, setActiveAccount, isWebviewReady, safeExecuteInWebview });
   WaDeckScheduleModule.init({ ...moduleCtx, trimMapSize, runWithBusyButton, accountById, ensureWebview, isWebviewReady, sendWebviewInput, delay, formatDateTime, nextSendAtLocal, showConfirm, applyTemplateVariables });
+  window.WaDeckSplitModule?.init?.(moduleCtx);
+  window.WaDeckSignalPanel?.init?.({ ...moduleCtx, setActiveAccount });
+  document.getElementById('toggle-split')?.addEventListener('click', () => window.WaDeckSplitModule?.toggle?.());
   if (typeof window.waDeck.onAutoUpdateStatus === 'function' && !state.autoUpdateUnsubscribe) {
     state.autoUpdateUnsubscribe = window.waDeck.onAutoUpdateStatus((payload) => {
       WaDeckAutoUpdateModule.handleAutoUpdateStatus(payload);
@@ -102,6 +107,12 @@ async function init() {
       // The search palette owns Escape while open — don't also reset the UI.
       if (window.WaDeckGlobalSearch?.isOpen?.()) {
         window.WaDeckGlobalSearch.close();
+        return;
+      }
+      // Фокус в host-поле (адрес сплита, поиск) — Escape наш, не гостя
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) {
+        try { ae.blur(); } catch { /* ignore */ }
         return;
       }
       const closedSomething = handleEscapeUiReset();
@@ -123,17 +134,24 @@ async function init() {
       window.WaDeckUnreadFeed?.jumpToNext?.().catch(() => {});
     });
   }
+  if (typeof window.waDeck.onBundleRenamed === 'function') {
+    window.waDeck.onBundleRenamed(() => {
+      showToast('Приложение переименовано в OmniDeck.app. Если значок в доке пропал — перетащите его туда заново.', 'info', 12000);
+    });
+  }
   if (typeof window.waDeck.onHostHotkey === 'function' && !state.hostHotkeyUnsubscribe) {
     // Сквозные хоткеи: main перехватывает Cmd+1..9/K/T/R/зум (иначе они мертвы
     // при фокусе в композере WhatsApp) и доставляет сюда одним каналом.
     state.hostHotkeyUnsubscribe = window.waDeck.onHostHotkey(({ code }) => {
       const c = String(code || '');
       if (c === 'F1') { window.WaDeckHelp?.toggle?.(); return; }
+      // Cmd+Shift+E — только с шифтом и роутится (см. main.js), код уникален
+      if (c === 'KeyE') { humanTypePaste().catch(() => {}); return; }
       const hostInputFocused = (() => {
         const a = document.activeElement;
         return Boolean(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable));
       })();
-      const digit = /^Digit([0-9])$/.exec(c);
+      const digit = /^(?:Digit|Numpad)([0-9])$/.exec(c);
       if (digit) {
         const n = Number(digit[1]);
         if (n === 0) { applyZoom(100); return; }
@@ -150,8 +168,8 @@ async function init() {
         if (!hostInputFocused) refreshActiveWebview();
         return;
       }
-      if (c === 'Equal') { applyZoom((Number(els.zoomSlider?.value) || 100) + 10); return; }
-      if (c === 'Minus') { applyZoom((Number(els.zoomSlider?.value) || 100) - 10); }
+      if (c === 'Equal' || c === 'NumpadAdd') { applyZoom((Number(els.zoomSlider?.value) || 100) + 10); return; }
+      if (c === 'Minus' || c === 'NumpadSubtract') { applyZoom((Number(els.zoomSlider?.value) || 100) - 10); }
     });
   }
 
@@ -160,14 +178,19 @@ async function init() {
     window.waDeck.onWebviewCrashed((payload) => {
       console.warn('[webview-crashed]', payload.reason);
       setStatus(`Webview упал (${payload.reason}). Перезагрузка...`);
-      // Find and reload any crashed webviews
+      // Сплит-браузер — тоже webview, но не в state.webviews
+      if (window.WaDeckSplitModule?.reloadIfCrashed?.(payload.webContentsId)) return;
+      // main передаёт id упавшего contents: старый «getWebContentsId бросит»
+      // в новых Electron не работает — метод возвращает id и после краша
       for (const [accountId, webview] of state.webviews) {
         try {
-          if (webview && webview.isConnected && webview.getWebContentsId) {
-            webview.getWebContentsId(); // throws if crashed
-          }
-        } catch {
+          if (!webview || !webview.isConnected) continue;
+          const wcId = typeof webview.getWebContentsId === 'function' ? webview.getWebContentsId() : -1;
+          if (payload.webContentsId && wcId !== payload.webContentsId) continue;
           console.warn('[webview-crashed] reloading', accountId);
+          try { webview.reload(); } catch { /* already dead */ }
+        } catch {
+          console.warn('[webview-crashed] reloading (getWebContentsId threw)', accountId);
           try { webview.reload(); } catch { /* already dead */ }
         }
       }

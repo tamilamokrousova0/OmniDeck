@@ -80,7 +80,7 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
   }
 
   function waAccounts() {
-    return (state?.accounts || []).filter((a) => a.type !== 'telegram' && !a.frozen);
+    return (state?.accounts || []).filter((a) => a.type === 'whatsapp' && !a.frozen);
   }
 
   /* ── Background sweep ── */

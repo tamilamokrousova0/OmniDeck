@@ -35,6 +35,30 @@ contextBridge.exposeInMainWorld('waDeck', {
   openDataDir: () => ipcRenderer.invoke('open-data-dir'),
   getClipboardText: () => ipcRenderer.invoke('get-clipboard-text'),
   setClipboardText: (text) => ipcRenderer.invoke('set-clipboard-text', text),
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  signalLinkStart: (payload) => ipcRenderer.invoke('signal-link-start', payload),
+  signalLinkCancel: () => ipcRenderer.invoke('signal-link-cancel'),
+  signalInstallCli: (payload) => ipcRenderer.invoke('signal-install-cli', payload),
+  signalGetStatus: () => ipcRenderer.invoke('signal-get-status'),
+  signalSend: (payload) => ipcRenderer.invoke('signal-send', payload),
+  signalLoadMessages: () => ipcRenderer.invoke('signal-load-messages'),
+  signalOpenAttachment: (filePath) => ipcRenderer.invoke('signal-open-attachment', filePath),
+  signalListContacts: (payload) => ipcRenderer.invoke('signal-list-contacts', payload),
+  signalReact: (payload) => ipcRenderer.invoke('signal-react', payload),
+  signalDeleteChat: (payload) => ipcRenderer.invoke('signal-delete-chat', payload),
+  signalListGroups: (payload) => ipcRenderer.invoke('signal-list-groups', payload),
+  signalReadAttachment: (filePath) => ipcRenderer.invoke('signal-read-attachment', filePath),
+  signalTranscribeWav: (payload) => ipcRenderer.invoke('signal-transcribe-wav', payload),
+  signalSetTranscript: (payload) => ipcRenderer.invoke('signal-set-transcript', payload),
+  signalRestart: (payload) => ipcRenderer.invoke('signal-restart', payload),
+  signalSaveAttachment: (filePath) => ipcRenderer.invoke('signal-save-attachment', filePath),
+  openSignalDesktop: () => ipcRenderer.invoke('open-signal-desktop'),
+  onSignalEvent: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload || {});
+    ipcRenderer.on('signal-event', listener);
+    return () => ipcRenderer.removeListener('signal-event', listener);
+  },
   setDockBadge: (payload) => ipcRenderer.invoke('set-dock-badge', payload),
   checkForUpdates: (payload) => ipcRenderer.invoke('check-for-updates', payload),
   getReleaseNotes: () => ipcRenderer.invoke('get-release-notes'),
@@ -61,6 +85,18 @@ contextBridge.exposeInMainWorld('waDeck', {
     const listener = () => callback();
     ipcRenderer.on('host-next-unread-pressed', listener);
     return () => ipcRenderer.removeListener('host-next-unread-pressed', listener);
+  },
+  onBundleRenamed: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = () => callback();
+    ipcRenderer.on('bundle-renamed', listener);
+    return () => ipcRenderer.removeListener('bundle-renamed', listener);
+  },
+  onGuestLink: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload || {});
+    ipcRenderer.on('guest-link', listener);
+    return () => ipcRenderer.removeListener('guest-link', listener);
   },
   onHostHotkey: (callback) => {
     if (typeof callback !== 'function') return () => {};

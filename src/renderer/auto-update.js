@@ -1,4 +1,4 @@
-import { closeModalAnimated } from './core/helpers.js';
+import { closeModalAnimated, setStatusZone } from './core/helpers.js';
 
   /* Release notes come from the bundled CHANGELOG.md via IPC (main parses
      it once per session). The old hardcoded map silently went stale — its
@@ -50,7 +50,8 @@ import { closeModalAnimated } from './core/helpers.js';
       return;
     }
     if (status === 'downloading') {
-      setStatus(`Обновление: загрузка ${Math.max(0, Math.min(100, percent))}%`);
+      // setStatusZone, не setStatus: прогресс обновляется в одной плашке
+      setStatusZone(`Обновление: загрузка ${Math.max(0, Math.min(100, percent))}%`);
       updateToastProgress(percent);
       return;
     }

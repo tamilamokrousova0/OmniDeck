@@ -36,6 +36,17 @@ function handleEscapeUiReset() {
   // снять reply-цитату, закрыть поиск чатов — раньше проглатывались декой).
   const isOpen = (el) => Boolean(el && !el.classList.contains('hidden') && !el.classList.contains('is-closing'));
 
+  // 0. Справка F1 — самый верхний слой (main глушит Escape, свой keydown
+  //    в help.js до неё не долетает)
+  if (window.WaDeckHelp?.isOpen?.()) {
+    window.WaDeckHelp.hide();
+    return true;
+  }
+  // 0.5 Сплит-браузер — Esc закрывает панель (F1 обещает «верхний слой»)
+  if (window.WaDeckSplitModule?.isOpen?.()) {
+    window.WaDeckSplitModule.toggle();
+    return true;
+  }
   // 1. Floating Tweaks popover — the most shallow UI
   const tweaksPanel = document.getElementById('tweaks-panel');
   if (isOpen(tweaksPanel)) {

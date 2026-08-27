@@ -108,8 +108,8 @@ html[data-theme='light'] {
 
 * {
   box-sizing: border-box;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(126, 142, 160, 0.25) transparent;
+  /* scrollbar-width/color здесь глушили ВСЕ ::-webkit-scrollbar-правила ниже
+     (в Chromium стандартные свойства выключают webkit-псевдоэлементы) */
 }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -160,8 +160,6 @@ body {
 }
 
 .sidebar {
-  border-right: 1px solid var(--line);
-  background: linear-gradient(180deg, var(--bg-soft) 0%, var(--bg) 100%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -206,65 +204,21 @@ html[data-theme='light'] .sidebar-resize-handle.active {
   justify-content: center;
 }
 
-/* ── Brand Hub SVG ── */
-.brand-hub-svg {
-  display: block;
-}
+/* ── Знак «Триада»: три дуги, поворот вместо пульсации ── */
+.brand-hub-svg { display: block; }
 
-.brand-center {
-  transition: fill 0.25s ease;
-  animation: brandCenterIdle 3s ease-in-out infinite;
+.brand-arcs {
+  transform-origin: 50% 50%;
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
-@keyframes brandCenterIdle {
-  0%, 100% { fill: #2d8cf0; }
-  50%      { fill: #4da0f5; }
-}
+.brand:hover .brand-arcs { transform: rotate(20deg); }
+.brand.is-clicked .brand-arcs { transform: rotate(120deg); }
 
-/* ── Brand click burst animation ── */
-.brand.is-clicked .brand-pulse {
-  animation: brandClickPulse 0.7s ease-out forwards;
+@media (prefers-reduced-motion: reduce) {
+  .brand-arcs { transition: none; }
+  .brand:hover .brand-arcs,
+  .brand.is-clicked .brand-arcs { transform: none; }
 }
-@keyframes brandClickPulse {
-  0%   { r: 10; opacity: 0.8; stroke-width: 2.5; }
-  100% { r: 38; opacity: 0; stroke-width: 0.5; }
-}
-
-.brand.is-clicked .brand-center {
-  animation: brandClickCenter 0.5s ease-out forwards;
-}
-@keyframes brandClickCenter {
-  0%   { fill: #4da0f5; r: 12; }
-  30%  { fill: #6bb3f5; r: 13; }
-  100% { fill: #2d8cf0; r: 10; }
-}
-
-.brand.is-clicked .brand-leaf {
-  animation: brandClickLeaf 0.6s ease-out forwards;
-}
-@keyframes brandClickLeaf {
-  0%   { r: 6; fill: #29a399; }
-  25%  { r: 8; fill: #3dd6c5; }
-  100% { r: 6; fill: #29a399; }
-}
-.brand.is-clicked .brand-leaf-1 { animation-delay: 0s; }
-.brand.is-clicked .brand-leaf-2 { animation-delay: 0.06s; }
-.brand.is-clicked .brand-leaf-3 { animation-delay: 0.12s; }
-.brand.is-clicked .brand-leaf-4 { animation-delay: 0.18s; }
-.brand.is-clicked .brand-leaf-5 { animation-delay: 0.24s; }
-
-.brand.is-clicked .brand-link {
-  animation: brandClickLink 0.5s ease-out forwards;
-}
-@keyframes brandClickLink {
-  0%   { opacity: 0.5; stroke-width: 2.5; stroke: #2d8cf0; }
-  30%  { opacity: 1;   stroke-width: 3.5; stroke: #6bb3f5; }
-  100% { opacity: 0.5; stroke-width: 2.5; stroke: #2d8cf0; }
-}
-.brand.is-clicked .brand-link-1 { animation-delay: 0s; }
-.brand.is-clicked .brand-link-2 { animation-delay: 0.06s; }
-.brand.is-clicked .brand-link-3 { animation-delay: 0.12s; }
-.brand.is-clicked .brand-link-4 { animation-delay: 0.18s; }
-.brand.is-clicked .brand-link-5 { animation-delay: 0.24s; }
 
 .accounts-list {
   width: 100%;
@@ -328,16 +282,10 @@ html[data-theme='light'] .sidebar-resize-handle.active {
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
   cursor: grab;
   /* No decorative drop shadow (Law 1) — box-shadow is reserved for the
      state rings (active green / reminder amber). */
   overflow: visible;
-  transition: transform 0.2s ease-out, filter 0.15s ease, box-shadow 0.25s ease;
-}
-
-.account-item:hover {
-  filter: brightness(1.1);
 }
 
 .account-item.dragging {
@@ -349,13 +297,6 @@ html[data-theme='light'] .sidebar-resize-handle.active {
   box-shadow: 0 0 0 2px rgba(61, 214, 140, 0.6);
 }
 
-.account-item.active {
-  border-radius: var(--radius-lg);
-  transform: scale(1.08);
-  box-shadow: 0 0 16px rgba(61, 214, 140, 0.35), 0 0 4px rgba(61, 214, 140, 0.5);
-  animation: activeGlow 2.5s ease-in-out 3 alternate;
-}
-
 @keyframes activeGlow {
   from { box-shadow: 0 0 12px rgba(61, 214, 140, 0.3), 0 0 4px rgba(61, 214, 140, 0.5); }
   to { box-shadow: 0 0 20px rgba(61, 214, 140, 0.45), 0 0 6px rgba(61, 214, 140, 0.6); }
@@ -363,12 +304,6 @@ html[data-theme='light'] .sidebar-resize-handle.active {
 .account-item.active::before {
   content: '';
   position: absolute;
-  left: -2px;
-  top: 4px;
-  bottom: 4px;
-  width: 3.5px;
-  border-radius: var(--radius-sm);
-  background: #fff;
   z-index: 2;
 }
 
@@ -495,8 +430,6 @@ html[data-theme='light'] .sidebar-resize-handle.active {
 }
 
 .toolbar {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  background: linear-gradient(180deg, #171b26 0%, #141823 100%);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -513,10 +446,17 @@ html[data-theme='light'] .sidebar-resize-handle.active {
    flexes to the leftover space and scrolls internally. */
 .toolbar-left,
 .weather-widget,
-.toolbar-clock,
-.toolbar-right {
+.toolbar-clock {
   flex: 0 0 auto;
 }
+/* .toolbar-right сжимаем: иначе при узком окне шестерёнка настроек и
+   счётчик уезжали за правый край (у чипа/статуса ellipsis уже есть) */
+.toolbar-right {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.toolbar-right .status { flex: 0 1 auto; min-width: 0; }
+.toolbar-right .active-account-display { flex: 0 1 auto; min-width: 0; }
 
 .toolbar-left,
 .toolbar-right {
@@ -532,21 +472,14 @@ html[data-theme='light'] .sidebar-resize-handle.active {
 }
 
 /* ── Toolbar groups: visually unite related buttons ─────────────── */
+/* Де-боксинг (Franz-стиль): группы разделяются отступом, не рамками */
 .toolbar-group {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 2px;
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.04);
 }
 .toolbar-left > .toolbar-group + .toolbar-group {
-  margin-left: 10px;
-}
-html[data-theme='light'] .toolbar-group {
-  background: rgba(0, 0, 0, 0.02);
-  border-color: rgba(0, 0, 0, 0.04);
+  margin-left: 14px;
 }
 
 .toolbar-right {
@@ -564,14 +497,7 @@ html[data-theme='light'] .toolbar-group {
   line-height: 1.25;
 }
 .status:not(:empty) {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.03);
-  padding: 5px 12px;
-}
-html[data-theme='light'] .status:not(:empty) {
-  border-color: rgba(0, 0, 0, 0.1);
-  background: rgba(0, 0, 0, 0.02);
+  padding: 5px 4px;
 }
 
 .toolbar .btn {
@@ -588,27 +514,8 @@ html[data-theme='light'] .status:not(:empty) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  color: color-mix(in srgb, var(--text) 75%, transparent);
-  transition: background 0.14s ease, color 0.14s ease;
   box-shadow: none;
-}
-
-.btn-toolbar-icon:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: transparent;
-  box-shadow: none;
-  transform: none;
-  color: var(--text);
-}
-
-html[data-theme='light'] .btn-toolbar-icon {
-  color: color-mix(in srgb, var(--text) 60%, transparent);
-}
-html[data-theme='light'] .btn-toolbar-icon:hover {
-  background: rgba(0, 0, 0, 0.06);
 }
 
 /* ── Hover label on toolbar icons (inline expansion, matches screenshot) ──
@@ -663,16 +570,9 @@ html[data-theme='light'] .btn-toolbar-icon:hover {
 
 .btn-toolbar-icon:active {
   background: rgba(255, 255, 255, 0.09);
-  transform: none;
   transition-duration: 0.08s;
 }
 
-.btn-toolbar-icon.is-active {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: transparent;
-  color: var(--text);
-  box-shadow: none;
-}
 html[data-theme='light'] .btn-toolbar-icon:active,
 html[data-theme='light'] .btn-toolbar-icon.is-active {
   background: rgba(0, 0, 0, 0.09);
@@ -745,19 +645,16 @@ html[data-theme='light'] .btn-toolbar-icon.is-active {
   align-items: center;
   gap: 7px;
   cursor: default;
-  padding: 6px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.03);
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 500;
   color: var(--text);
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease;
   z-index: 10;
 }
 .toolbar-clock:hover {
   background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
 }
 .toolbar-clock .icon-clock {
   width: 13px;
@@ -776,21 +673,10 @@ html[data-theme='light'] .btn-toolbar-icon.is-active {
 
 .active-account-display {
   max-width: min(36vw, 380px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 500;
-  padding: 5px 12px 5px 10px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  box-shadow: none;
-  pointer-events: none;
   position: relative;
-  display: inline-flex;
-  align-items: center;
   gap: 6px;
   z-index: 1;
 }
@@ -804,15 +690,10 @@ html[data-theme='light'] .btn-toolbar-icon.is-active {
   flex-shrink: 0;
 }
 
-.active-account-display.is-empty {
-  color: var(--muted);
-  border-color: rgba(255, 255, 255, 0.06);
-}
 .active-account-display.is-empty::before {
   background: var(--signal-warn);
   box-shadow: 0 0 6px color-mix(in srgb, var(--signal-warn) 55%, transparent);
 }
-
 
 .weather-widget {
   position: relative;
@@ -821,28 +702,20 @@ html[data-theme='light'] .btn-toolbar-icon.is-active {
 }
 
 .weather-toggle {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-md);
   color: var(--text);
   font-size: 12px;
   font-weight: 500;
   line-height: 1;
-  padding: 6px 12px;
+  padding: 6px 8px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
   cursor: pointer;
   box-shadow: none;
-  transition: background 0.18s ease, border-color 0.18s ease;
 }
 .weather-toggle:hover {
   background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
-}
-html[data-theme='light'] .weather-toggle {
-  border-color: rgba(0, 0, 0, 0.1);
-  background: rgba(0, 0, 0, 0.02);
 }
 html[data-theme='light'] .weather-toggle:hover {
   background: rgba(0, 0, 0, 0.05);
@@ -858,10 +731,6 @@ html[data-theme='light'] .weather-toggle:hover {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.weather-city {
-  color: var(--muted);
-  font-weight: 500;
-}
 .weather-city::before {
   content: '·';
   margin-right: 6px;
@@ -874,10 +743,7 @@ html[data-theme='light'] .weather-toggle:hover {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--muted);
-  font-weight: 600;
 }
-
 
 .release-notes-list {
   display: grid;
@@ -914,17 +780,8 @@ html[data-theme='light'] .weather-toggle:hover {
 }
 
 .unread-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: 1px solid var(--line);
-  background: var(--bg-soft);
-  color: var(--text-2);
-  border-radius: 999px;
-  padding: 3px 7px;
-  font-size: 11px;
-  font-weight: 700;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .unread-indicator.hidden {
@@ -936,41 +793,24 @@ html[data-theme='light'] .weather-toggle:hover {
 .add-account-btn {
   width: 40px;
   height: 40px;
-  border-radius: var(--radius-lg);
   font-size: 22px;
   font-weight: 300;
   line-height: 1;
   padding: 0;
   display: grid;
   place-items: center;
-  color: var(--muted);
-  border: 1px dashed rgba(255, 255, 255, 0.14);
-  background: transparent;
   cursor: pointer;
-  transition:
-    background 0.18s ease,
-    border-color 0.18s ease,
-    color 0.18s ease,
-    transform 0.15s ease;
   box-shadow: none;
 }
 .add-account-btn:hover {
-  background: rgba(34, 197, 94, 0.08);
-  border-color: rgba(34, 197, 94, 0.5);
   border-style: solid;
-  color: var(--green);
   transform: scale(1.04);
 }
 .add-account-btn:active {
   transform: scale(0.96);
 }
-html[data-theme='light'] .add-account-btn {
-  border-color: rgba(0, 0, 0, 0.14);
-  color: #64748b;
-}
 html[data-theme='light'] .add-account-btn:hover {
   background: rgba(34, 197, 94, 0.08);
-  border-color: rgba(34, 197, 94, 0.5);
 }
 
 /* ── Add-account popover (WhatsApp / Telegram choice) ── */
@@ -991,7 +831,9 @@ html[data-theme='light'] .add-account-btn:hover {
   border-radius: var(--radius-lg);
   padding: 5px;
   display: flex;
-  flex-direction: row;
+  /* Столбик вверх от «+»: ряд из 3+ иконок шире сайдбара и вылезал за края.
+     column-reverse — WhatsApp (первый в разметке) ближе всех к кнопке. */
+  flex-direction: column-reverse;
   gap: 4px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
   z-index: 60;
@@ -1035,6 +877,10 @@ html[data-theme='light'] .add-account-btn:hover {
 
 .add-account-option .icon-tg-mini {
   color: #2AABEE;
+}
+
+.add-account-option .icon-sig-mini {
+  color: #3A76F0;
 }
 
 html[data-theme='light'] .add-account-popover {
@@ -1171,40 +1017,20 @@ html[data-theme='light'] .hub-screen {
 }
 
 .hub-overlay {
-  border: 1px solid rgba(43, 49, 59, 0.6);
-  border-radius: var(--radius-lg);
-  padding: 14px 16px;
-  min-width: min(420px, 82vw);
-  max-height: 80vh;
   height: fit-content;
-  text-align: center;
-  background: linear-gradient(180deg, rgba(21, 26, 36, 0.58) 0%, rgba(15, 19, 25, 0.72) 100%);
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
   z-index: 1;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 12px 26px rgba(4, 9, 19, 0.45);
 }
-
-.hub-title {
-  font-size: 22px;
-  letter-spacing: 0.02em;
-  font-weight: 800;
-  color: #e5eaf0;
-}
-
-
-
 
 .panel {
   position: absolute;
-  /* Hang flush under the toolbar's bottom border, aligned to right edge */
+  /* Вплотную под нижней границей тулбара: 40px строка + 1px бордер.
+     49px оставляли 8px просвета, сквозь который светился чат. */
   right: 0;
-  top: 49px;
+  top: 41px;
   bottom: 0;
   width: 370px;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   border-right: 0;
   border-bottom: 0;
@@ -1212,14 +1038,10 @@ html[data-theme='light'] .hub-screen {
   border-top-right-radius: 0;
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
-  background: linear-gradient(180deg, #1b2233 0%, #151a24 100%);
-  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
   overflow: hidden;
   z-index: 20;
-  box-shadow: -12px 0 40px -16px rgba(0, 0, 0, 0.5), -2px 0 8px rgba(0, 0, 0, 0.2);
   padding-bottom: 16px;
   animation: panelSlideIn 0.13s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
@@ -1267,11 +1089,8 @@ html[data-theme='light'] .panel {
 
 .panel-top {
   display: flex;
-  align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--line);
 }
 
 .panel-actions {
@@ -1289,22 +1108,8 @@ html[data-theme='light'] .panel {
   place-items: center;
 }
 
-
-.panel-title {
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  color: #e5eaf0;
-}
-
-
 .card {
-  border: 1px solid #2b313b;
-  background: linear-gradient(180deg, #1a2030 0%, #181e2b 100%);
-  border-radius: var(--radius-lg);
-  padding: 10px;
   display: grid;
-  gap: 8px;
   transition: border-color 0.2s ease;
 }
 
@@ -1318,23 +1123,15 @@ html[data-theme='light'] .panel {
 }
 
 .card-collapsible {
-  padding: 0;
   overflow: hidden;
 }
 
 .card-collapsible > summary {
   list-style: none;
   cursor: pointer;
-  padding: 9px 32px 9px 12px;
-  font-size: 12px;
-  letter-spacing: 0.01em;
-  color: #e5eaf0;
-  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  min-height: 36px;
-  border-radius: var(--radius-lg);
   position: relative;
 }
 
@@ -1345,13 +1142,9 @@ html[data-theme='light'] .panel {
 .card-collapsible > summary::after {
   content: '';
   position: absolute;
-  right: 14px;
-  width: 8px;
-  height: 8px;
   border-right: 2px solid var(--muted);
   border-bottom: 2px solid var(--muted);
   transform: rotate(45deg);
-  transition: transform 0.25s ease;
 }
 
 .card-collapsible[open] > summary::after {
@@ -1359,13 +1152,8 @@ html[data-theme='light'] .panel {
 }
 
 .card-collapsible[open] > summary {
-  border-bottom: 1px solid var(--line);
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
-}
-
-.card-collapsible > :not(summary) {
-  margin: 0 10px 10px;
 }
 
 .card-collapsible[open] > :not(summary) {
@@ -1426,7 +1214,6 @@ html[data-theme='light'] textarea[readonly] {
   background: rgba(0, 0, 0, 0.04);
 }
 
-
 .btn-refresh.is-spinning .icon-refresh {
   animation: spinRefresh 0.65s ease;
 }
@@ -1440,8 +1227,8 @@ html[data-theme='light'] textarea[readonly] {
   width: 12px;
   height: 12px;
   border-radius: 999px;
-  border: 2px solid rgba(3, 33, 22, 0.28);
-  border-top-color: #032116;
+  border: 2px solid color-mix(in oklab, currentColor 30%, transparent);
+  border-top-color: currentColor;
   display: inline-block;
   margin-left: 7px;
   animation: spinRefresh 0.72s linear infinite;
@@ -1456,7 +1243,6 @@ html[data-theme='light'] textarea[readonly] {
     transform: rotate(360deg);
   }
 }
-
 
 .btn {
   border-radius: var(--radius-lg);
@@ -1486,7 +1272,6 @@ html[data-theme='light'] textarea[readonly] {
 }
 
 .btn-primary:hover {
-  box-shadow: 0 4px 16px rgba(61, 214, 140, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
   background: linear-gradient(180deg, #45dfa0 0%, var(--green-deep) 100%);
 }
 
@@ -1566,7 +1351,6 @@ html[data-theme='light'] textarea[readonly] {
   max-height: 220px;
   overflow: auto;
   display: grid;
-  gap: 6px;
 }
 
 .attachment-item,
@@ -1592,9 +1376,7 @@ html[data-theme='light'] textarea[readonly] {
 
 /* Quick-time buttons under the "Время отправки" field (now + N minutes). */
 .schedule-quick-row {
-  display: flex;
   flex-wrap: wrap;
-  gap: 6px;
   margin: 6px 0 2px;
 }
 
@@ -1603,11 +1385,9 @@ html[data-theme='light'] textarea[readonly] {
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 2px 10px;
   min-width: 0;
   min-height: 24px;
   height: 24px;
-  font-size: 11px;
   font-weight: 600;
   line-height: 1;
 }
@@ -1764,7 +1544,7 @@ html[data-theme='light'] .picker-account-display.is-empty {
 
 @media (max-width: 1450px) {
   .app {
-    grid-template-columns: var(--sidebar-width, 72px) minmax(0, 1fr);
+    grid-template-columns: var(--sidebar-width, 80px) minmax(0, 1fr);
   }
 
   .panel {
@@ -1782,10 +1562,6 @@ html[data-theme='light'] .picker-account-display.is-empty {
   .toolbar {
     gap: 4px;
     padding: 3px 5px;
-  }
-
-  .weather-widget {
-    transform: translate(calc(-100% - 80px), -50%);
   }
 
   .zoom-control {
@@ -1915,20 +1691,9 @@ html[data-theme='light'] .crm-hover-label { color: #4a6a8a; }
 html[data-theme='light'] .crm-hover-value { color: #2a3a50; }
 html[data-theme='light'] .crm-hover-empty { color: #8a9ab0; }
 
-html[data-theme='light'] .sidebar {
-  background: linear-gradient(180deg, #f8fcff 0%, #f0f7ff 100%);
-}
-
 html[data-theme='light'] .brand {
   border-color: #bed0e8;
   background: linear-gradient(180deg, #ffffff 0%, #edf4ff 100%);
-}
-
-html[data-theme='light'] .account-item.active {
-  box-shadow: 0 0 12px rgba(42, 180, 110, 0.3);
-}
-html[data-theme='light'] .account-item.active::before {
-  background: #1a7a4c;
 }
 
 html[data-theme='light'] .account-unread {
@@ -1954,8 +1719,6 @@ html[data-theme='light'] .sidebar-scroll-btn:not(.hidden):hover {
   color: #1e3f63;
 }
 
-
-
 html[data-theme='light'] .hub-dashboard {
   scrollbar-color: rgba(0, 0, 0, 0.12) transparent;
 }
@@ -1963,28 +1726,12 @@ html[data-theme='light'] .toolbar-clock .icon-clock {
   color: #5a6a7c;
 }
 html[data-theme='light'] .weather-toggle {
-  border-color: #b8cae0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(237, 245, 255, 0.95) 100%);
   color: #19375b;
 }
 
 html[data-theme='light'] .weather-temp {
   color: #143b67;
 }
-
-html[data-theme='light'] .weather-city {
-  color: #5d7597;
-}
-
-
-html[data-theme='light'] .unread-indicator {
-  border-color: #c4d5ea;
-  background: #eef5ff;
-  color: #c2305f;
-}
-
-
-
 
 html[data-theme='light'] .panel {
   box-shadow: -12px 0 24px rgba(0, 0, 0, 0.08);
@@ -1997,7 +1744,6 @@ html[data-theme='light'] .panel-body {
 html[data-theme='light'] .card-collapsible > summary::after {
   border-color: #4f6f94;
 }
-
 
 html[data-theme='light'] .hint {
   color: #5f7798;
@@ -2036,10 +1782,6 @@ html[data-theme='light'] .attachment-item,
 html[data-theme='light'] .scheduled-item {
   border-color: #c8d8ec;
   background: #f8fbff;
-}
-html[data-theme='light'] .badge {
-  border-color: #c0cfe0;
-  color: #5d7597;
 }
 html[data-theme='light'] .badge.pending {
   border-color: #2db36e;
@@ -2121,7 +1863,8 @@ html[data-theme='light'] .account-menu-status {
   position: fixed;
   bottom: 12px;
   right: 12px;
-  z-index: var(--z-popover);
+  /* Выше FAB (150) и модалок (1100): тосты-ошибки не должны прятаться */
+  z-index: 1250;
   display: flex;
   flex-direction: column-reverse;
   gap: 6px;
@@ -2137,7 +1880,6 @@ html[data-theme='light'] .account-menu-status {
   font-size: 11px;
   font-weight: 600;
   padding: 8px 14px;
-  max-width: 340px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
   animation: toastSlideIn 0.16s ease-out;
   opacity: 1;
@@ -2159,7 +1901,6 @@ html[data-theme='light'] .account-menu-status {
 .toast.is-hiding {
   opacity: 0;
 }
-
 
 /* ── Confirm модал ── */
 .modal-card-confirm {
@@ -2597,7 +2338,7 @@ html[data-theme='light'] .color-dot.active {
   color: #7e8ea0;
 }
 .btn-action-icon:hover svg {
-  color: #e5eaf0;
+  color: #11233a;
 }
 
 .btn-delete-account {
@@ -2729,7 +2470,6 @@ html[data-theme='light'] .color-dot.active {
   line-height: 1.35;
 }
 
-
 /* ── Tooltip на аккаунтах ── */
 .account-tooltip {
   position: absolute;
@@ -2852,13 +2592,9 @@ html[data-theme='light'] .color-dot.active {
 
 /* ── Hub Dashboard ── */
 .hub-dashboard {
-  margin-top: 14px;
-  display: grid;
-  gap: 5px;
   width: 100%;
   max-width: 420px;
   text-align: left;
-  max-height: 50vh;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
@@ -2868,10 +2604,7 @@ html[data-theme='light'] .color-dot.active {
 .hub-dashboard::-webkit-scrollbar-thumb { background: rgba(126, 142, 160, 0.3); border-radius: 3px; }
 
 .hub-actions {
-  display: flex;
-  gap: 8px;
   justify-content: center;
-  margin-top: 4px;
 }
 
 .hub-actions .btn {
@@ -2915,30 +2648,12 @@ html[data-theme='light'] .color-dot.active {
 .hub-action-settings > svg { margin: 0; }
 
 /* ── Hub World Clocks ── */
-.hub-clocks {
-  display: flex;
-  gap: 28px;
-  justify-content: center;
-  margin: 10px 0 6px;
-  flex-wrap: wrap;
-}
-.hub-clock-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-}
 .hub-clock-time {
   font: 500 26px/1 var(--mono);
-  letter-spacing: -0.02em;
-  color: #e5eaf0;
-  letter-spacing: 2px;
 }
 .hub-clock-label {
   font: 600 11px/1 'Segoe UI', system-ui, sans-serif;
-  color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.6px;
 }
 
 /* ── Zoom Control ── */
@@ -3158,8 +2873,6 @@ html[data-theme='light'] .clocks-add-form input {
 
 /* (Legacy .add-account-btn override removed — handled by the new rules above) */
 
-
-
 /* Hub action buttons — light flatness: keep border, drop lift + shadow */
 .hub-actions .btn:hover {
   transform: none;
@@ -3168,7 +2881,6 @@ html[data-theme='light'] .clocks-add-form input {
 .hub-actions .btn:active {
   transform: scale(0.97);
 }
-
 
 /* ── Staggered Entrance Animations ── */
 @keyframes slideInLeft {
@@ -3197,7 +2909,7 @@ html[data-theme='light'] .clocks-add-form input {
 .account-item:nth-child(5) { animation-delay: 0.16s; }
 .account-item:nth-child(6) { animation-delay: 0.2s; }
 .account-item:nth-child(7) { animation-delay: 0.24s; }
-.account-item:nth-child(8) { animation-delay: 0.56s; }
+.account-item:nth-child(8) { animation-delay: 0.28s; }
 
 /* Toolbar entrance */
 .toolbar {
@@ -3235,7 +2947,6 @@ html[data-theme='light'] .clocks-add-form input {
   animation: badgePop 0.4s ease-out;
 }
 
-
 /* ── Settings Panel Slide-In (uses @keyframes panelSlideIn from line ~1286) ── */
 
 /* ── Card Section (details) Improved Animation ── */
@@ -3247,7 +2958,6 @@ html[data-theme='light'] .clocks-add-form input {
   transition: background 0.15s ease, color 0.15s ease;
 }
 .card-collapsible > summary:hover {
-  background: rgba(255, 255, 255, 0.04);
   color: #fff;
 }
 .card-collapsible > summary:active {
@@ -3273,7 +2983,6 @@ html[data-theme='light'] .clocks-add-form input {
 }
 
 /* ── Modal Entrance Animation (uses keyframes from .modal/.modal-card above) ── */
-
 
 /* ── Clock Settings Row Hover ── */
 .clocks-settings-row {
@@ -3346,7 +3055,6 @@ html[data-theme='light'] .clocks-add-form input {
   position: relative;
 }
 
-
 /* ── Voice Message Button ── */
 .btn-voice:hover .icon-voice {
   animation: voicePulse 0.5s ease;
@@ -3406,7 +3114,6 @@ html[data-theme='light'] .btn-voice.is-recording {
   border-radius: var(--radius-sm);
 }
 
-
 /* ══════════════════════════════════════════════════
    Global Placeholder Styles
    ══════════════════════════════════════════════════ */
@@ -3457,7 +3164,6 @@ html[data-theme='light'] .modal-close-btn:focus-visible,
 html[data-theme='light'] .account-item:focus-visible {
   box-shadow: var(--focus-ring);
 }
-
 
 /* ══════════════════════════════════════════════════
    Modal Close Animation
@@ -3517,8 +3223,6 @@ html[data-theme='light'] .panel-title-icon {
 .panel-title {
   font-size: 15px;
   font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3579,24 +3283,19 @@ html[data-theme='light'] .settings-back-btn:hover {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--muted);
-  margin: 4px 6px 8px;
 }
 .settings-group-label + .settings-group-label { margin-top: 18px; }
-.settings-menu-list + .settings-group-label { margin-top: 20px; }
 
 /* ── Settings menu item (card in top-level list) ── */
 .settings-menu-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
   margin-bottom: 8px;
 }
 .settings-menu-item {
   display: flex;
   align-items: center;
-  gap: 12px;
   width: 100%;
-  padding: 12px 14px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.025);
@@ -3629,8 +3328,6 @@ html[data-theme='light'] .settings-menu-item:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
   border-radius: var(--radius-md);
   background: rgba(34, 197, 94, 0.1);
   color: var(--green);
@@ -3645,12 +3342,10 @@ html[data-theme='light'] .settings-menu-item:hover {
 .settings-menu-text {
   display: flex;
   flex-direction: column;
-  gap: 3px;
   flex: 1 1 auto;
   min-width: 0;
 }
 .settings-menu-title {
-  font-size: 14px;
   font-weight: 600;
   color: var(--text);
   letter-spacing: -0.01em;
@@ -3659,7 +3354,6 @@ html[data-theme='light'] .settings-menu-item:hover {
   text-overflow: ellipsis;
 }
 .settings-menu-sub {
-  font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
@@ -3758,16 +3452,12 @@ html[data-theme='light'] .settings-check-update:hover {
   display: none;
 }
 .settings-view-detail details.card-collapsible {
-  padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.02);
-  margin-bottom: 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
-.settings-view-detail details.card-collapsible[open] { padding: 16px; }
 html[data-theme='light'] .settings-view-detail details.card-collapsible {
   border-color: rgba(0, 0, 0, 0.07);
   background: rgba(0, 0, 0, 0.015);
@@ -3777,8 +3467,6 @@ html[data-theme='light'] .settings-view-detail details.card-collapsible {
 .settings-view-detail label:not(.toggle-row) {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -3788,7 +3476,6 @@ html[data-theme='light'] .settings-view-detail details.card-collapsible {
 .settings-view-detail label > input[type="datetime-local"],
 .settings-view-detail label > select,
 .settings-view-detail label > textarea {
-  font-size: 13px;
   font-weight: 400;
   text-transform: none;
   letter-spacing: normal;
@@ -3985,7 +3672,6 @@ html[data-theme='light'] .tweaks-collapse-btn {
 }
 html[data-theme='light'] .tweaks-collapse-btn:hover {
   color: var(--text);
-  background: rgba(0, 0, 0, 0.04);
 }
 
 /* ── Tweaks panel internals (shared styles) ───────────────────── */
@@ -4151,8 +3837,6 @@ html[data-scene='minimal'] #app .panel {
 .toggle-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 10px 4px;
   cursor: pointer;
   border-radius: var(--radius-md);
   transition: background 0.15s ease;
@@ -4166,20 +3850,16 @@ html[data-scene='minimal'] #app .panel {
 .toggle-row-text {
   display: flex;
   flex-direction: column;
-  gap: 3px;
   flex: 1 1 auto;
   min-width: 0;
 }
 .toggle-row-title {
-  font-size: 13px;
   color: var(--text);
   font-weight: 500;
   line-height: 1.3;
 }
 .toggle-row-hint {
-  font-size: 11px;
   color: var(--muted);
-  line-height: 1.4;
 }
 .toggle-switch {
   position: relative;
@@ -4252,7 +3932,6 @@ html[data-theme='light'] .toggle-switch-thumb {
   cursor: pointer;
   outline: none;
   transition: border-color 0.15s ease, background 0.15s ease;
-  appearance: auto;
 }
 .settings-select:hover {
   border-color: rgba(255, 255, 255, 0.18);
@@ -4468,7 +4147,6 @@ html[data-theme='light'] .update-toast-progress {
   height: 30px;
   padding: 0 12px;
   border-radius: var(--radius-md);
-  background: color-mix(in oklab, var(--bg-2) 60%, transparent);
   border: 1px solid var(--stroke-soft);
   color: var(--text-2);
   font-size: 12px;
@@ -4478,8 +4156,6 @@ html[data-theme='light'] .update-toast-progress {
 }
 .weather-toggle:hover,
 .toolbar-clock:hover {
-  border-color: var(--stroke);
-  background: color-mix(in oklab, var(--bg-2) 60%, transparent);
   color: var(--text-strong);
 }
 .weather-temp,
@@ -4497,7 +4173,6 @@ html[data-theme='light'] .update-toast-progress {
 
 /* Active account "chip" — flat pill in accent tint */
 .active-account-display {
-  border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
   background: color-mix(in oklab, var(--accent) 14%, var(--bg-1));
   color: var(--text-strong);
   font-size: 12px;
@@ -4521,7 +4196,6 @@ html[data-theme='light'] .update-toast-progress {
 /* Unread indicator — cleaner badge */
 .unread-indicator {
   background: color-mix(in oklab, var(--rose) 18%, var(--bg-1));
-  border: 1px solid color-mix(in oklab, var(--rose) 35%, transparent);
   color: var(--text-strong);
   height: 24px;
   padding: 0 10px;
@@ -4545,12 +4219,10 @@ html[data-theme='light'] .toolbar {
 }
 html[data-theme='light'] .active-account-display {
   background: color-mix(in oklab, var(--accent) 10%, #ffffff);
-  border-color: color-mix(in oklab, var(--accent) 35%, #dbe4f3);
   color: #11233a;
 }
 html[data-theme='light'] .active-account-display.is-empty {
   background: #f4f7fc;
-  border-color: #dbe4f3;
   color: #58708f;
 }
 html[data-theme='light'] .btn-toolbar-icon {
@@ -4566,23 +4238,18 @@ html[data-theme='light'] .btn-toolbar-icon.is-active {
 }
 html[data-theme='light'] .weather-toggle,
 html[data-theme='light'] .toolbar-clock {
-  background: #ffffff;
-  border-color: #dbe4f3;
   color: #58708f;
 }
 html[data-theme='light'] .weather-toggle:hover,
 html[data-theme='light'] .toolbar-clock:hover {
-  border-color: #b7c7e0;
   color: #11233a;
-  background: #ffffff;
 }
 html[data-theme='light'] .weather-temp,
 html[data-theme='light'] .toolbar-clock-time { color: #11233a; }
 html[data-theme='light'] .weather-city { color: #58708f; }
 html[data-theme='light'] .unread-indicator {
-  background: color-mix(in oklab, var(--red) 12%, #ffffff);
-  border-color: color-mix(in oklab, var(--red) 35%, #dbe4f3);
-  color: #11233a;
+  background: color-mix(in oklab, var(--red) 10%, #ffffff);
+  color: #c03030;
 }
 
 /* ── Sidebar redesign (Phase 1) — flat working surface, no blur ── */
@@ -4974,8 +4641,7 @@ html[data-theme='light'] .add-account-btn:hover {
 /* Only show non-default tags (e.g. "Новые", "Заморожен"). The static
    WhatsApp/Telegram tag is redundant at this density — we already have a
    coloured avatar and left bar. */
-.hub-acct-row3 .hub-acct-tag-accent,
-.hub-acct-row3 .hub-acct-tag-blue { display: none; }
+
 .hub-acct-tag {
   font-size: 10px;
   font-weight: 500;
@@ -5062,7 +4728,6 @@ html[data-theme='light'] .hub-empty {
 }
 .panel-top {
   border-bottom: 1px solid var(--stroke-soft);
-  padding-bottom: 12px;
 }
 .panel-title {
   color: var(--text-strong);
@@ -5083,7 +4748,6 @@ html[data-theme='light'] .hub-empty {
   text-transform: none;
   font-size: 13px;
   border-radius: var(--radius-md);
-  min-height: 40px;
 }
 .card-collapsible > summary:hover {
   background: var(--bg-3);
@@ -5156,7 +4820,6 @@ html[data-theme='light'] .modal-card-crm .crm-badge {
   box-shadow: var(--shadow-panel);
 }
 .modal-card-crm .crm-modal-head {
-  padding: 16px 18px 12px;
   margin-bottom: 0;
   border-bottom: 1px solid var(--stroke-soft);
   gap: 10px;
@@ -5171,13 +4834,11 @@ html[data-theme='light'] .modal-card-crm .crm-badge {
 /* Section label rendered from the <label>'s first text node — we style the
    native label to act as the "s-label" (uppercase, tracked, muted) */
 .modal-card-crm .crm-section {
-  padding: 14px 18px;
   margin: 0;
   border-radius: 0;
   border: 0;
   border-bottom: 1px solid var(--stroke-soft);
   background: transparent;
-  gap: 8px;
 }
 .modal-card-crm .crm-section-accent {
   border-color: transparent;
@@ -5204,7 +4865,6 @@ html[data-theme='light'] .modal-card-crm .crm-badge {
   background: color-mix(in oklab, var(--bg-2) 50%, transparent);
   border: 1px solid var(--stroke-soft);
   border-radius: var(--radius-md);
-  padding: 10px 12px;
   line-height: 1.45;
 }
 .modal-card-crm .crm-label input:focus,
@@ -5239,7 +4899,6 @@ html[data-theme='light'] .modal-card-crm .crm-badge {
   background: var(--accent-soft);
 }
 .modal-card-crm .crm-modal-actions {
-  padding: 14px 18px 16px;
   margin-bottom: 0;
   gap: 8px;
   border-top: 0;
@@ -5279,7 +4938,6 @@ html[data-theme='light'] .modal-card-crm .crm-badge {
   transform: none;
 }
 .modal-card-crm .crm-meta {
-  padding: 8px 18px 14px;
   font-family: var(--mono);
   font-size: 10px;
   color: var(--text-4);
@@ -5744,11 +5402,9 @@ html[data-theme='light'] .tmpl-lib-lang { color: #7289a7; }
   cursor: pointer;
 }
 .weather-display:hover {
-  border-color: var(--stroke-soft) !important;
   color: var(--text-2) !important;
 }
 html[data-theme='light'] .weather-display:hover {
-  border-color: #dbe4f3 !important;
   color: #58708f !important;
 }
 
@@ -5830,7 +5486,6 @@ html[data-theme='light'] .schedule-edit-banner {
   inset: -6px;
 }
 
-
 /* Template variables hint under the library list */
 .tmpl-vars-hint {
   margin-top: 6px;
@@ -5910,7 +5565,6 @@ html[data-theme='light'] {
   --imp-line: rgba(37, 99, 235, 0.5);
 }
 
-
 /* CRM drawer star toggle (30×30, matches the close-button footprint) */
 .crm-fav-toggle {
   margin-right: 8px;
@@ -5977,11 +5631,12 @@ html[data-theme='light'] {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 44px;
+  gap: 8px;
+  height: 34px;
   padding: 0 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  background: linear-gradient(180deg, #161b26 0%, #141823 100%);
+  border-bottom: 1px solid var(--stroke-soft);
+  /* Токены вместо хардкод-градиента: в светлой теме полоса была тёмной */
+  background: var(--bg-1);
   min-width: 0;
   /* Плавное появление/сворачивание высоты вместо резкого display-скачка —
      чат под ним не дёргается на 44px. */
@@ -5989,7 +5644,7 @@ html[data-theme='light'] {
 }
 /* overflow:hidden только в свёрнутом состоянии — иначе клипнулся бы поповер
    «+N тихих» (position:absolute, top:100%). */
-.pin-feed.hidden {
+.pin-feed.is-collapsed {
   height: 0;
   opacity: 0;
   border-bottom-width: 0;
@@ -6001,15 +5656,15 @@ html[data-theme='light'] {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 11px;
+  gap: 7px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--text-2, #aab4c2);
   user-select: none;
 }
-.pin-feed-legend { display: inline-flex; align-items: center; gap: 6px; }
+.pin-feed-legend { display: inline-flex; align-items: center; gap: 5px; }
 .pin-feed-lg { display: inline-flex; }
-.pin-feed-lg svg { width: 13px; height: 13px; display: block; }
+.pin-feed-lg svg { width: 12px; height: 12px; display: block; }
 .pin-feed-lg-fav { color: var(--fav); }
 .pin-feed-lg-imp { color: var(--imp); }
 
@@ -6032,12 +5687,12 @@ html[data-theme='light'] {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 32px;
-  padding: 0 9px;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
   border: 1px solid var(--stroke, #262d38);
   border-left-width: 3px;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--bg-2, #1b212a);
   color: var(--text-strong, #e6eaf0);
   cursor: pointer;
@@ -6050,25 +5705,25 @@ html[data-theme='light'] {
 .pin-chip-fav:hover { border-color: var(--fav-line); }
 .pin-chip-imp:hover { border-color: var(--imp-line); }
 .pin-chip-ic { flex: 0 0 auto; display: inline-flex; }
-.pin-chip-ic svg { width: 14px; height: 14px; display: block; }
+.pin-chip-ic svg { width: 12px; height: 12px; display: block; }
 .pin-chip-fav .pin-chip-ic { color: var(--fav); }
 .pin-chip-imp .pin-chip-ic { color: var(--imp); }
-.pin-chip-txt { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.pin-chip-txt { display: flex; flex-direction: column; min-width: 0; line-height: 1.1; }
 .pin-chip-who {
-  font-size: 11.5px; font-weight: 700; max-width: 150px;
+  font-size: 11px; font-weight: 700; max-width: 150px;
   overflow: hidden; text-overflow: ellipsis;
 }
 .pin-chip-sub {
-  font-size: 9px; color: var(--text-3, #6b7686); max-width: 150px;
+  font-size: 8.5px; color: var(--text-3, #6b7686); max-width: 150px;
   overflow: hidden; text-overflow: ellipsis;
 }
 .pin-chip-cnt {
   flex: 0 0 auto;
-  min-width: 17px; height: 17px; padding: 0 4px;
+  min-width: 15px; height: 15px; padding: 0 4px;
   border-radius: 999px;
   background: var(--rose, #d94040);
   color: #fff;
-  font-size: 10px; font-weight: 800; line-height: 17px; text-align: center;
+  font-size: 9.5px; font-weight: 800; line-height: 15px; text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
@@ -6076,8 +5731,8 @@ html[data-theme='light'] {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  height: 26px;
-  padding: 0 10px;
+  height: 22px;
+  padding: 0 9px;
   border: 1px dashed var(--stroke, #262d38);
   border-radius: 999px;
   background: transparent;
@@ -6152,8 +5807,8 @@ html[data-theme='light'] {
   max-height: 62vh;
   display: flex;
   flex-direction: column;
-  background: var(--panel-bg, #101826);
-  border: 1px solid var(--border, #263042);
+  background: var(--bg-1);
+  border: 1px solid var(--stroke);
   border-radius: 14px;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
   overflow: hidden;
@@ -6162,7 +5817,7 @@ html[data-theme='light'] {
   border: none;
   outline: none;
   background: transparent;
-  color: var(--text-1, #e8edf5);
+  color: var(--text-strong);
   font-size: 15px;
   padding: 16px 18px 12px;
 }
@@ -6170,7 +5825,7 @@ html[data-theme='light'] {
   padding: 0 18px 8px;
   font-size: 11px;
   color: var(--text-3, #6b7686);
-  border-bottom: 1px solid var(--border, #263042);
+  border-bottom: 1px solid var(--stroke-soft);
 }
 .gs-list {
   overflow-y: auto;
@@ -6189,11 +5844,11 @@ html[data-theme='light'] {
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: var(--text-1, #e8edf5);
+  color: var(--text-strong);
   text-align: left;
   cursor: pointer;
 }
-.gs-row.is-active { background: var(--accent-dim, rgba(61, 214, 140, 0.14)); }
+.gs-row.is-active { background: var(--accent-soft); }
 .gs-row-who {
   font-size: 13px;
   font-weight: 600;
@@ -6228,31 +5883,48 @@ html[data-theme='light'] {
 #hub-overlay.huf-active #hub-unread-feed {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
   width: min(640px, 92%);
   margin: 0 auto;
   padding-bottom: 20px;
 }
 
-/* Компактная однострочная строка: имя · превью · аккаунт · счётчик */
+/* Строка в визуальном языке хаба (как вкладка «Аккаунты»): цветной аватар
+   аккаунта + имя + превью, разделители вместо рамок-боксов, бейдж как
+   .hub-acct-badge. */
 .huf-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 11px;
-  border-radius: 9px;
-  border: 1px solid var(--stroke-soft);
-  background: var(--bg-2);
+  gap: 10px;
+  padding: 7px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--stroke-soft);
+  border-radius: 0;
+  background: transparent;
   cursor: pointer;
   text-align: left;
   color: inherit;
   font: inherit;
   min-width: 0;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s;
 }
+.huf-row:last-of-type { border-bottom: 0; }
 .huf-row:hover {
-  background: var(--bg-3);
-  border-color: var(--accent);
+  background: var(--bg-2);
+  border-radius: 8px;
+}
+.huf-row-av {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-md, 8px);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.25);
 }
 .huf-row-who {
   flex-shrink: 0;
@@ -6277,34 +5949,31 @@ html[data-theme='light'] {
   font-size: 10px;
   padding: 1px 7px;
   border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: color-mix(in oklab, var(--bg-2) 50%, transparent);
+  border: 1px solid var(--stroke-soft);
+  color: var(--text-3);
   font-weight: 600;
 }
+/* Тот же бейдж, что у плиток «Аккаунты» (.hub-acct-badge) — был зелёным и спорил с ним */
 .huf-row-cnt {
   flex-shrink: 0;
-  min-width: 18px;
+  min-width: 20px;
+  height: 18px;
   text-align: center;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
+  line-height: 16px;
   padding: 1px 6px;
-  border-radius: 999px;
-  background: #22c55e;
+  border-radius: var(--radius-md, 8px);
+  background: var(--rose);
   color: #fff;
+  font-variant-numeric: tabular-nums;
 }
 .huf-note {
   text-align: center;
   font-size: 11.5px;
   color: var(--text-3);
   padding: 8px 0 2px;
-}
-
-html[data-theme='light'] .huf-row {
-  border-color: rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.75);
-}
-html[data-theme='light'] .huf-row:hover {
-  background: #ffffff;
 }
 
 /* ── F1 Help overlay ───────────────────────────────────────────────────── */
@@ -6414,7 +6083,6 @@ html[data-theme='light'] { color-scheme: light; }
 .schedule-quick-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
 }
 .btn-quick-min { padding: 2px 4px; white-space: nowrap; font-size: 10.5px; }
 
@@ -6559,3 +6227,936 @@ html[data-theme='light'] { color-scheme: light; }
 .modal-card-crm .crm-modal-actions .btn.btn-primary,
 .modal-card-crm .crm-modal-actions .btn:not(.btn-primary) { height: 28px; padding: 0 12px; }
 .modal-card-crm .crm-meta { padding: 6px 14px 10px; }
+
+/* ══ Split view: встроенный браузер справа от чатов ══ */
+.workspace { --split-w: 44%; }
+.workspace.split-on {
+  grid-template-columns: minmax(320px, 1fr) minmax(280px, var(--split-w));
+}
+.workspace.split-on .toolbar,
+.workspace.split-on .pin-feed { grid-column: 1 / -1; }
+.workspace.split-on .webviews { grid-column: 1; }
+
+.split-pane {
+  display: none;
+  grid-row: 3;
+  grid-column: 2;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-left: 1px solid var(--stroke);
+  background: var(--bg-1);
+}
+.workspace.split-on .split-pane { display: flex; }
+
+.split-divider {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 6;
+}
+.split-divider:hover { background: var(--accent-soft); }
+
+.split-bar {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--stroke-soft);
+  flex: 0 0 auto;
+}
+.split-btn { flex: 0 0 auto; }
+.split-url {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-strong);
+  outline: none;
+}
+
+.split-view-host { position: relative; flex: 1 1 auto; min-height: 0; }
+.split-view-host webview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.split-view-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-4);
+  font-size: 12px;
+  text-align: center;
+  padding: 20px;
+}
+
+/* ══ Signal-панель (у signal-аккаунтов нет webview) ══ */
+.signal-panel {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  z-index: 2;
+}
+.signal-panel.hidden { display: none; }
+/* Franz-стиль: центрированная карточка иконка → заголовок → подзаголовок →
+   primary-кнопка → E2E-строка */
+.signal-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 420px;
+  padding: 28px 32px;
+  text-align: center;
+}
+.signal-card-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: #3A76F0;
+  display: grid;
+  place-items: center;
+  margin-bottom: 6px;
+  box-shadow: 0 8px 24px -10px rgba(58, 118, 240, 0.6);
+}
+.signal-card-icon svg { width: 38px; height: 38px; }
+.signal-card-title { font-size: 17px; font-weight: 700; color: var(--text-strong); }
+.signal-status-error { color: var(--rose); }
+.signal-status-no_cli { color: var(--warn); }
+.signal-card-acct { font-size: 11px; font-weight: 600; color: var(--text-3); }
+.signal-card-sub { font-size: 12px; color: var(--text-2); line-height: 1.45; max-width: 340px; }
+.signal-card-count { font-size: 12.5px; font-weight: 700; color: var(--text-strong); }
+.signal-qr {
+  width: 200px;
+  height: 200px;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px;
+  margin-top: 6px;
+}
+.signal-card-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 10px; }
+.signal-btn-primary {
+  background: #3A76F0;
+  border-color: #3A76F0;
+  color: #fff;
+  font-weight: 700;
+  padding: 8px 18px;
+  border-radius: 999px;
+}
+.signal-btn-primary:hover { background: #2f63cf; border-color: #2f63cf; }
+.signal-card-e2e {
+  margin-top: 14px;
+  font-size: 10.5px;
+  color: var(--text-3);
+  line-height: 1.45;
+  max-width: 360px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--bg-2) 60%, transparent);
+}
+
+/* Signal: бейдж типа аккаунта и хаб-тег */
+.account-type-sig {
+  background: #3A76F0;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+html[data-theme='light'] .account-type-sig {
+  box-shadow: 0 0 0 2px #e8edf4;
+}
+.hub-acct-tag-violet {
+  color: var(--accent-violet);
+  background: color-mix(in oklab, var(--accent-violet) 14%, transparent);
+  border-color: color-mix(in oklab, var(--accent-violet) 35%, transparent);
+}
+
+/* ══ Де-боксинг тулбара — финальный слой каскада.
+   Перебивает: базовый .btn (градиент+рамка, строка ~1440), светлый
+   html[light] .btn (~1989) и «pill look»-эпоху weather/clock (~4440).
+   Без этого слоя иконки и виджеты снова обрастают коробочками. ══ */
+.toolbar .btn-toolbar-icon {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.toolbar .btn-toolbar-icon:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: transparent;
+}
+.toolbar .btn-toolbar-icon.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+  box-shadow: none;
+}
+html[data-theme='light'] .toolbar .btn-toolbar-icon {
+  background: transparent;
+  border-color: transparent;
+}
+html[data-theme='light'] .toolbar .btn-toolbar-icon:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+html[data-theme='light'] .toolbar .btn-toolbar-icon.is-active {
+  background: color-mix(in oklab, var(--accent) 15%, #ffffff);
+  color: #179458;
+}
+.weather-toggle,
+.toolbar-clock {
+  background: transparent;
+  border-color: transparent;
+}
+.weather-toggle:hover,
+.toolbar-clock:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: transparent;
+}
+html[data-theme='light'] .weather-toggle,
+html[data-theme='light'] .toolbar-clock {
+  background: transparent;
+  border-color: transparent;
+}
+html[data-theme='light'] .weather-toggle:hover,
+html[data-theme='light'] .toolbar-clock:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+/* .weather-display:hover пришпиливал border-color через !important */
+.weather-display:hover { border-color: transparent !important; }
+html[data-theme='light'] .weather-display:hover { border-color: transparent !important; }
+.unread-indicator { border: 0; }
+.active-account-display { border: 0; }
+
+/* ══ Signal-клиент (Franz-язык: full-bleed, без рамок-коробок) ══ */
+.signal-client {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  background: var(--bg);
+}
+.signal-chatlist {
+  flex: 0 0 264px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--stroke-soft);
+  background: var(--bg-1);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.signal-chatlist-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 8px;
+}
+.signal-chatlist-head-txt { flex: 1 1 auto; min-width: 0; }
+.signal-chatlist-title { font-size: 14px; font-weight: 700; color: var(--text-strong); }
+.signal-chatlist-sub { font-size: 10.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.signal-desktop-btn {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.signal-desktop-btn:hover { background: var(--bg-2); color: var(--text-strong); }
+.signal-desktop-btn svg { width: 13px; height: 13px; }
+.signal-chatlist-empty {
+  padding: 18px 14px;
+  font-size: 11px;
+  color: var(--text-4);
+  text-align: center;
+}
+.signal-chat-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  min-width: 0;
+}
+.signal-chat-row:hover { background: var(--bg-2); }
+.signal-chat-row.is-active { background: color-mix(in oklab, #3A76F0 16%, transparent); }
+.signal-chat-av {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+.signal-chat-txt { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; }
+.signal-chat-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.signal-chat-preview {
+  font-size: 11.5px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.signal-chat-side {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.signal-chat-time { font-size: 10px; color: var(--text-4); font-variant-numeric: tabular-nums; }
+.signal-chat-time.has-unread { color: #3A76F0; font-weight: 600; }
+.signal-chat-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #3A76F0;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+.signal-thread {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.signal-thread-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--stroke-soft);
+  background: var(--bg-1);
+}
+.signal-thread-av { flex: 0 0 30px; width: 30px; height: 30px; font-size: 12px; }
+.signal-thread-head-name { font-size: 13px; font-weight: 700; color: var(--text-strong); }
+.signal-thread-head-sub { font-size: 10.5px; color: var(--text-3); }
+.signal-thread-empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 24px;
+}
+.signal-thread-empty .signal-card-icon { margin-bottom: 8px; }
+.signal-thread-empty-title { font-size: 17px; font-weight: 700; color: var(--text-strong); }
+.signal-thread-empty-sub { font-size: 12px; color: var(--text-3); line-height: 1.5; max-width: 340px; }
+.signal-e2e-pill {
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #22c16f;
+  background: color-mix(in oklab, #22c16f 12%, transparent);
+  border: 1px solid color-mix(in oklab, #22c16f 30%, transparent);
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+
+.signal-feed {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 18px;
+  scrollbar-width: thin;
+}
+.signal-msg {
+  background: var(--bg-2);
+}
+.signal-msg-out {
+  align-self: flex-end;
+  background: #3A76F0;
+}
+.signal-msg-out .signal-msg-text { color: #fff; }
+.signal-msg-out .signal-msg-time { color: rgba(255, 255, 255, 0.65); }
+.signal-msg-meta { font-size: 10px; font-weight: 700; color: #3A76F0; margin-bottom: 2px; }
+.signal-msg-text {
+  font-size: 13px;
+  color: var(--text-strong);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  /* место под время в правом нижнем углу */
+  padding-right: 38px;
+}
+.signal-msg-time {
+  position: absolute;
+  right: 10px;
+  bottom: 6px;
+  font-size: 9px;
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+}
+
+.signal-composer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  border-top: 1px solid var(--stroke-soft);
+}
+.signal-composer-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-strong);
+  border-radius: 999px;
+  outline: none;
+}
+.signal-composer-input:focus { border-color: #3A76F0; }
+.signal-send-btn {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 50%;
+  background: #3A76F0;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.signal-send-btn:hover { background: #2f63cf; }
+.signal-send-btn:disabled { opacity: 0.6; cursor: default; }
+.signal-send-btn svg { margin-left: -1px; }
+.signal-composer-err {
+  padding: 4px 16px 8px;
+  font-size: 10.5px;
+  color: var(--rose);
+  background: var(--bg-1);
+}
+.signal-composer-err.hidden { display: none; }
+
+/* Signal: вложения в пузырях */
+.signal-msg-img {
+  display: block;
+  max-height: 240px;
+  border-radius: 10px;
+  margin: 2px 0 4px;
+  cursor: zoom-in;
+  object-fit: cover;
+}
+.signal-msg-att {
+  display: block;
+  margin: 2px 0 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--stroke-soft);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--bg-1) 60%, transparent);
+  color: var(--text-strong);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.signal-msg-att:hover { border-color: var(--stroke); }
+.signal-msg-out .signal-msg-att {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+/* Signal: выбор контакта для нового чата */
+.signal-picker-search {
+  margin: 2px 10px 8px;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--text-strong);
+  background: var(--bg-2);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  outline: none;
+}
+.signal-picker-search:focus { border-color: #3A76F0; }
+.signal-picker-rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  scrollbar-width: thin;
+}
+
+/* ══ Signal: hover-действия, реакции, цитаты, галочки, композер-кнопки ══ */
+.signal-msg { overflow: visible; }
+.signal-msg-actions {
+  top: -26px;
+  right: 0;
+  border-radius: 999px;
+  z-index: 3;
+}
+.signal-msg-in .signal-msg-actions { right: auto; left: 0; }
+.signal-msg:hover .signal-msg-actions { display: inline-flex; }
+.signal-msg-action {
+  font-size: 13px;
+  line-height: 1;
+}
+.signal-msg-out .signal-reaction-chip { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.3); }
+
+.signal-msg-quote {
+  border-left: 3px solid #3A76F0;
+  border-radius: 4px;
+  background: color-mix(in oklab, #3A76F0 8%, transparent);
+  padding: 4px 8px;
+  margin-bottom: 4px;
+}
+.signal-msg-out .signal-msg-quote { background: rgba(255,255,255,0.14); border-left-color: rgba(255,255,255,0.7); }
+.signal-msg-quote-author { font-size: 10px; font-weight: 700; color: #3A76F0; }
+.signal-msg-out .signal-msg-quote-author { color: #fff; }
+.signal-msg-quote-text {
+  font-size: 11px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+.signal-msg-out .signal-msg-quote-text { color: rgba(255,255,255,0.8); }
+
+.signal-reply-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 14px;
+  padding: 6px 10px;
+  border-left: 3px solid #3A76F0;
+  border-radius: 6px;
+  background: color-mix(in oklab, #3A76F0 8%, var(--bg-1));
+}
+.signal-reply-bar-txt { flex: 1 1 auto; min-width: 0; }
+.signal-reply-bar-who { font-size: 10.5px; font-weight: 700; color: #3A76F0; }
+.signal-reply-bar-text {
+  font-size: 11px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.signal-composer-icon-btn {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-3);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.signal-composer-icon-btn:hover { background: var(--bg-2); color: var(--text-strong); }
+.signal-composer-icon-btn svg { width: 17px; height: 17px; }
+
+.signal-emoji-panel {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  margin: 0 14px 4px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--stroke);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  max-height: 160px;
+  overflow-y: auto;
+}
+.signal-emoji-panel.hidden { display: none; }
+.signal-emoji-btn {
+  border: 0;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1.4;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 2px;
+}
+.signal-emoji-btn:hover { background: var(--bg-2); }
+
+.signal-chat-av-img { object-fit: cover; }
+
+.signal-ctx-menu {
+  position: fixed;
+  z-index: 1300;
+  min-width: 190px;
+  padding: 5px;
+  border-radius: 10px;
+  background: var(--panel, var(--bg-1));
+  border: 1px solid var(--line, var(--stroke));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+}
+.signal-ctx-item {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 12px;
+  color: var(--text-strong);
+  cursor: pointer;
+}
+.signal-ctx-item:hover { background: var(--bg-2); }
+.signal-ctx-item.is-danger { color: var(--rose); }
+
+.signal-archive-toggle {
+  margin: 4px 10px 10px;
+  padding: 6px 10px;
+  border: 1px dashed var(--stroke-soft);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 11px;
+  cursor: pointer;
+  text-align: center;
+}
+.signal-archive-toggle:hover { color: var(--text-strong); border-color: var(--stroke); }
+
+/* ══ Signal: Franz-структура сообщений (финальный слой) ══ */
+.signal-feed { gap: 2px; }
+.signal-msg-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 72%;
+  align-self: flex-start;
+  margin-bottom: 6px;
+}
+.signal-msg-block-out { align-self: flex-end; align-items: flex-end; }
+.signal-msg-line { display: flex; align-items: center; gap: 6px; }
+.signal-msg {
+  position: relative;
+  max-width: 100%;
+  align-self: auto;
+  border-radius: 14px;
+  padding: 7px 12px;
+}
+.signal-msg-text { padding-right: 0; }
+.signal-msg-time { display: none; } /* время переехало в штамп под пузырём */
+
+/* Тихие иконки сбоку от пузыря — видны при наведении на строку */
+.signal-msg-actions {
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.signal-msg-line:hover .signal-msg-actions { opacity: 1; }
+.signal-msg-action {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  color: var(--text-3);
+  display: grid;
+  place-items: center;
+}
+.signal-msg-action:hover { background: var(--bg-2); color: var(--text-strong); }
+
+/* Реакция — круглый чип под пузырём (Franz) */
+.signal-msg-reactions { display: flex; gap: 4px; margin-top: 3px; flex-wrap: wrap; }
+.signal-reaction-chip {
+  font-size: 13px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-3);
+  border: 1px solid var(--stroke-soft);
+}
+.signal-reaction-chip.is-mine { border-color: #3A76F0; }
+.signal-msg-block-out .signal-reaction-chip { background: var(--bg-3); border-color: var(--stroke-soft); }
+
+/* Штамп времени под пузырём */
+.signal-msg-stamp {
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+}
+.signal-msg-ticks { font-size: 10px; letter-spacing: -1px; opacity: 0.8; }
+.signal-msg-ticks.is-read { opacity: 1; color: #3A76F0; font-weight: 700; }
+
+/* Картинка: кнопка скачивания поверх угла (Franz) */
+.signal-msg-imgwrap { position: relative; display: block; }
+.signal-msg-imgwrap .signal-msg-img { margin: 0; }
+.signal-img-dl {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(20, 24, 32, 0.65);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.signal-msg-imgwrap:hover .signal-img-dl { opacity: 1; }
+.signal-img-dl svg { width: 14px; height: 14px; }
+
+/* Поповер быстрых реакций */
+.signal-react-pop {
+  position: fixed;
+  z-index: 1300;
+  display: flex;
+  gap: 2px;
+  padding: 5px 7px;
+  border-radius: 999px;
+  background: var(--panel, var(--bg-1));
+  border: 1px solid var(--line, var(--stroke));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+.signal-react-pop-btn {
+  border: 0;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 5px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+.signal-react-pop-btn:hover { transform: scale(1.25); background: var(--bg-2); }
+.signal-react-pop-btn.is-mine { background: color-mix(in oklab, #3A76F0 20%, transparent); }
+
+/* Композер — единая пилюля (Franz): [+ | поле | 🙂 | синяя круглая] */
+.signal-composer {
+  margin: 8px 14px 12px;
+  padding: 4px 4px 4px 6px;
+  border: 1.5px solid var(--stroke);
+  border-radius: 999px;
+  background: var(--bg-1);
+  gap: 2px;
+  transition: border-color 0.15s ease;
+}
+.signal-composer:focus-within { border-color: #3A76F0; }
+.signal-composer-input {
+  height: 30px;
+  background: transparent;
+  border: 0;
+  padding: 0 8px;
+}
+.signal-composer-input:focus { border: 0; }
+.signal-send-btn { width: 30px; height: 30px; }
+.signal-send-btn svg { width: 14px; height: 14px; }
+
+/* ══ Аудит-фиксы: доступность и мелкие дефекты Signal/тулбара ══ */
+/* Де-боксинг съел focus ring клавиатурной навигации — возвращаем */
+.toolbar .btn-toolbar-icon:focus-visible,
+.weather-toggle:focus-visible,
+.signal-desktop-btn:focus-visible,
+.signal-msg-action:focus-visible,
+.signal-send-btn:focus-visible,
+.signal-composer-icon-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+/* Скрытые hover-иконки сообщений были кликабельны и фокусируемы вслепую */
+.signal-msg-actions { pointer-events: none; visibility: hidden; }
+.signal-msg-line:hover .signal-msg-actions,
+.signal-msg-line:focus-within .signal-msg-actions {
+  pointer-events: auto;
+  visibility: visible;
+}
+/* Чип реакции со счётчиком («❤ 2») сплющивался в овал из-за border-radius 50% */
+.signal-reaction-chip { border-radius: 999px; }
+/* Картинка не должна вылезать за пузырь на узкой панели */
+.signal-msg-img { max-width: min(280px, 100%); height: auto; }
+/* Длинное имя/uuid в шапке треда — многоточие вместо переполнения */
+.signal-thread-head-txt { min-width: 0; flex: 1 1 auto; }
+.signal-thread-head-name,
+.signal-thread-head-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Глобальный input:focus рисовал зелёное кольцо ВНУТРИ пилюли композера —
+   рамкой служит сама пилюля (signal-composer:focus-within) */
+.signal-composer-input:focus,
+.signal-picker-search:focus {
+  box-shadow: none;
+}
+
+/* Signal: транскрипт вложения (стиль плашки WhatsApp-расшифровки) */
+.signal-msg-transcript {
+  margin: 4px 0 2px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(45, 140, 240, 0.45);
+  background: color-mix(in oklab, var(--bg-1) 70%, transparent);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-strong);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.signal-msg-out .signal-msg-transcript {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #fff;
+}
+.signal-att-transcribe { font-size: 11px; opacity: 0.8; }
+.signal-att-transcribe:hover { opacity: 1; }
+
+/* ══ Аудит-2: контраст, размеры, hover ══ */
+/* Входящие пузыри Signal в светлой теме сливались с фоном треда (1.07:1) */
+html[data-theme='light'] .signal-msg {
+  background: #ffffff;
+  border: 1px solid var(--stroke-soft);
+}
+html[data-theme='light'] .signal-msg-out {
+  background: #3A76F0;
+  border-color: #3A76F0;
+}
+/* Hover строки ленты «Непрочитанные» был белым по белому */
+html[data-theme='light'] .huf-row:hover {
+  background: #eef4ff;
+}
+/* Кнопки split-бара: базовый .btn-icon min-width 30px раздувал их до 30×30 */
+/* «Добавить Signal» вёл себя иначе, чем Telegram/WhatsApp */
+.hub-action-sig:hover {
+  border-color: rgba(58, 118, 240, 0.4);
+  color: #3A76F0;
+}
+
+/* Ошибка расшифровки — отдельный тон от успешного транскрипта */
+.signal-msg-transcript-err {
+  border-color: rgba(220, 80, 80, 0.5);
+  color: var(--rose);
+}
+.signal-msg-out .signal-msg-transcript-err { color: #ffd9d9; }
+
+/* Кнопка перевода страницы в сплит-браузере: активна = страница переведена */
+.split-btn.is-active {
+  background: color-mix(in oklab, #3A76F0 20%, transparent);
+  color: #3A76F0;
+}
+
+/* ══ Браузер: бар в стиле Franz — ровные иконки, адрес-пилюля ══ */
+.split-bar {
+  gap: 2px;
+  padding: 7px 10px;
+}
+.split-btn {
+  display: grid;              /* иконки были смещены: инлайновый svg ловил baseline */
+  place-items: center;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-3);
+  line-height: 0;
+}
+.split-btn svg { width: 15px; height: 15px; display: block; }
+.split-btn:hover { background: var(--bg-2); color: var(--text-strong); }
+.split-btn:disabled { opacity: 0.4; }
+.split-url {
+  height: 28px;
+  margin: 0 6px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: var(--bg-2);
+  border: 1px solid transparent;
+  font-size: 12px;
+}
+.split-url:focus { border-color: #3A76F0; background: var(--bg-1); }
+
+/* Стартовый экран: иконка, подпись, крупное поле поиска (без приветствия) */
+.split-start {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  background: var(--bg);
+}
+.split-start.hidden { display: none; }
+.split-start-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklab, var(--accent-blue) 16%, transparent);
+  color: var(--accent-blue);
+}
+.split-start-icon svg { width: 38px; height: 38px; }
+.split-start-sub {
+  font-size: 15px;
+  color: var(--text-2);
+}
+.split-start-field {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: min(420px, 90%);
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--stroke);
+  transition: border-color 0.15s ease;
+}
+.split-start-field:focus-within { border-color: #3A76F0; }
+.split-start-field svg { width: 17px; height: 17px; color: var(--text-4); flex: 0 0 auto; }
+.split-start-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+  color: var(--text-strong);
+}
+.split-start-field input:focus { box-shadow: none; }

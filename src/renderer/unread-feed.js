@@ -98,7 +98,7 @@ import { updateHubDashboard, updateHubFilters } from './core/hub.js';
   }
 
   function waAccounts() {
-    return (state?.accounts || []).filter((a) => a.type !== 'telegram' && !a.frozen);
+    return (state?.accounts || []).filter((a) => a.type === 'whatsapp' && !a.frozen);
   }
 
   function accountName(accountId) {
@@ -124,6 +124,9 @@ import { updateHubDashboard, updateHubFilters } from './core/hub.js';
       })).filter((r) => r.name);
     });
     const settled = await Promise.all(scans.map((p) => p.catch(() => [])));
+    // Signal: строки из локальной истории панели (сканов не требует)
+    const signalRows = (window.WaDeckSignalPanel?.getUnreadRows?.() || []);
+    settled.push(signalRows);
     const now = Date.now();
     for (const [key, until] of _suppressed) {
       if (until <= now) _suppressed.delete(key);
@@ -214,6 +217,13 @@ import { updateHubDashboard, updateHubFilters } from './core/hub.js';
       el.type = 'button';
       el.className = 'huf-row';
       el.title = row.preview || row.name;
+      // Цветной аватар аккаунта — как у плиток «Аккаунты», чтобы лента
+      // непрочитанных не выглядела чужеродным списком
+      const acc = (state?.accounts || []).find((a) => a.id === row.accountId);
+      const av = document.createElement('span');
+      av.className = 'huf-row-av';
+      av.style.background = acc?.color || 'var(--bg-3)';
+      av.textContent = String(row.accountName || '').split(' ')[0].slice(0, 2).toUpperCase() || 'WA';
       const who = document.createElement('span');
       who.className = 'huf-row-who';
       who.textContent = row.name;
@@ -226,7 +236,7 @@ import { updateHubDashboard, updateHubFilters } from './core/hub.js';
       const cnt = document.createElement('span');
       cnt.className = 'huf-row-cnt';
       cnt.textContent = fmtCount(row.count);
-      el.append(who, preview, acct, cnt);
+      el.append(av, who, preview, acct, cnt);
       el.addEventListener('click', () => jump(row));
       frag.appendChild(el);
     }
@@ -243,6 +253,13 @@ import { updateHubDashboard, updateHubFilters } from './core/hub.js';
 
   async function jump(row) {
     if (!row) return;
+    if (row._sigKey) {
+      // Signal: прямое открытие чата панели, WA-механика поиска не нужна
+      _rows = _rows.filter((r) => !(r.accountId === row.accountId && r._sigKey === row._sigKey));
+      render();
+      window.WaDeckSignalPanel?.openChat?.(row.accountId, row._sigKey);
+      return;
+    }
     const key = row.accountId + '::' + row.name.toLowerCase();
     // Оптимистично прячем строку (открытие чата пометит его прочитанным);
     // следующий скан переподтвердит, если что-то осталось.

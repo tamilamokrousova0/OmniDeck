@@ -8,7 +8,8 @@ const { spawnSync, spawn } = require('child_process');
 const https = require('https');
 const { pathToFileURL } = require('url');
 const os = require('os');
-const { transcribeVoiceAt, cleanupStaleModels } = require('./voice-transcribe');
+const { transcribeVoiceAt, transcribeWavBase64, cleanupStaleModels, killWhisper } = require('./voice-transcribe');
+const { initSignal } = require('./signal');
 
 /*
  * Keep WhatsApp/Telegram webviews online while hidden.
@@ -43,7 +44,20 @@ app.commandLine.appendSwitch('disable-features', 'IntensiveWakeUpThrottling,Calc
  * произвольный путь, минуя диалог. Чистится по realpath. */
 const _dialogPickedPaths = new Set();
 async function rememberPickedPath(filePath) {
-  try { _dialogPickedPaths.add(await fs.realpath(path.resolve(String(filePath || '')))); } catch { /* ignore */ }
+  try {
+    const rp = await fs.realpath(path.resolve(String(filePath || '')));
+    _dialogPickedPaths.add(rp);
+    // Персистим: отложенная отправка с вложением вне $HOME ломалась после
+    // рестарта — набор жил только в памяти
+    if (state?.store) {
+      const arr = Array.isArray(state.store.pickedPaths) ? state.store.pickedPaths : [];
+      if (!arr.includes(rp)) {
+        arr.push(rp);
+        state.store.pickedPaths = arr.slice(-200);
+        saveStore().catch(() => {});
+      }
+    }
+  } catch { /* ignore */ }
 }
 
 async function isAttachmentPathAllowed(filePath) {
@@ -94,10 +108,15 @@ async function isAttachmentPathAllowed(filePath) {
 }
 
 const APP_ID = 'com.local.wadeck';
-const APP_TITLE = 'WA Deck';
+const APP_TITLE = 'OmniDeck';
+// Ребрендинг WA Deck → OmniDeck (2026-08). Каталог данных ПРИКОЛОЧЕН к
+// историческому имени: смена app.name иначе увела бы userData в
+// ~/Library/Application Support/OmniDeck, и все сессии/стор «пропали» бы.
+// Переезд каталога — только осознанной миграцией, не побочкой ренейма.
+app.setPath('userData', path.join(app.getPath('appData'), 'wa-deck'));
 const FALLBACK_CHROME_VERSION = '146.0.7680.188';
-const APP_ICON_PNG_PATH = path.join(__dirname, '..', 'assets', 'icon', 'wadeck-icon-512.png');
-const RELEASES_LATEST_URL = 'https://github.com/tamilamokrousova0/WA-Deck/releases/latest';
+const APP_ICON_PNG_PATH = path.join(__dirname, '..', 'assets', 'icon', 'omnideck-icon-512.png');
+const RELEASES_LATEST_URL = 'https://github.com/tamilamokrousova0/OmniDeck/releases/latest';
 
 let _appIsQuitting = false;
 
@@ -155,7 +174,13 @@ function normalizeWeatherUnit(value) {
 
 function buildWhatsAppUserAgent() {
   const chromeVersion = process.versions.chrome || FALLBACK_CHROME_VERSION;
-  return `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVersion} Safari/537.36`;
+  /* Платформа берётся из системы: раньше здесь была зашита Mac-строка, и в
+     «Связанных устройствах» телефона ВСЕ устройства (включая Windows)
+     подписывались как «Google Chrome (Mac OS)». */
+  const os = process.platform === 'win32'
+    ? 'Windows NT 10.0; Win64; x64'
+    : (process.platform === 'linux' ? 'X11; Linux x86_64' : 'Macintosh; Intel Mac OS X 10_15_7');
+  return `Mozilla/5.0 (${os}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVersion} Safari/537.36`;
 }
 
 const WA_USER_AGENT = buildWhatsAppUserAgent();
@@ -192,6 +217,7 @@ const state = {
 };
 
 let mainWindow;
+let signalService = null;
 let lastUpdateProgressPercent = -1;
 let autoUpdaterConfigured = false;
 let macDeveloperIdSignatureCache = null;
@@ -401,10 +427,18 @@ function sanitizeStore(raw) {
   clean.settings.uiDensity = validDensity.includes(String(clean.settings.uiDensity)) ? clean.settings.uiDensity : DEFAULT_SETTINGS.uiDensity;
   clean.settings.tweaksCollapsed = normalizeBool(clean.settings.tweaksCollapsed, DEFAULT_SETTINGS.tweaksCollapsed);
 
+  // Пути, разрешённые диалогом (вложения отложенной отправки вне $HOME)
+  // ЧИТАТЬ ИЗ raw: clean собирается заново, и поле в нём всегда отсутствовало —
+  // разрешённые диалогом пути терялись при каждой загрузке стора
+  clean.pickedPaths = Array.isArray(raw?.pickedPaths)
+    ? raw.pickedPaths.filter((x) => typeof x === 'string' && x).slice(-200)
+    : [];
+
   clean.accounts = clean.accounts
     .map((item, index) => ({
       id: String(item?.id || `wa_${Date.now()}_${index}`),
-      type: item?.type === 'telegram' ? 'telegram' : 'whatsapp',
+      type: ['telegram', 'signal'].includes(item?.type) ? item.type : 'whatsapp',
+      signalNumber: String(item?.signalNumber || ''),
       name: String(item?.name || `WP_${index + 1}`),
       color: String(item?.color || pickColor(index + 1)),
       iconPath: String(item?.iconPath || '').trim(),
@@ -588,7 +622,7 @@ async function loadStoreFromPath(storePath) {
     throw new Error(`store too large: ${stat.size} bytes > ${STORE_HARD_MAX_SIZE}`);
   }
   if (stat.size > STORE_MAX_SIZE) {
-    console.warn(`[WA-Deck] store is oversized (${stat.size} bytes), loading anyway — prune will shrink it`);
+    console.warn(`[OmniDeck] store is oversized (${stat.size} bytes), loading anyway — prune will shrink it`);
   }
   const content = await fs.readFile(storePath, 'utf8');
   return JSON.parse(content);
@@ -604,9 +638,9 @@ function quarantineCorruptStoreFile(filePath) {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const target = `${filePath}.corrupt-${stamp}`;
     fsSync.renameSync(filePath, target);
-    console.warn(`[WA-Deck] quarantined corrupt store file: ${target}`);
+    console.warn(`[OmniDeck] quarantined corrupt store file: ${target}`);
   } catch (err) {
-    console.warn('[WA-Deck] failed to quarantine corrupt store file:', err?.message || err);
+    console.warn('[OmniDeck] failed to quarantine corrupt store file:', err?.message || err);
   }
 }
 
@@ -629,7 +663,7 @@ async function loadStore() {
         try {
           const parsed = await loadStoreFromPath(backup);
           state.store = sanitizeStore(parsed);
-          console.warn('[WA-Deck] Primary store missing, recovered from .backup');
+          console.warn('[OmniDeck] Primary store missing, recovered from .backup');
           await saveStore(); // re-create primary
           return;
         } catch {
@@ -645,7 +679,7 @@ async function loadStore() {
     const parsed = await loadStoreFromPath(primary);
     state.store = sanitizeStore(parsed);
   } catch (err) {
-    console.warn('[WA-Deck] Primary store load failed:', err?.message || err);
+    console.warn('[OmniDeck] Primary store load failed:', err?.message || err);
     storeLoadDegraded = true;
     // Preserve the unreadable primary before anything can overwrite it
     quarantineCorruptStoreFile(primary);
@@ -654,10 +688,10 @@ async function loadStore() {
       try {
         const parsed = await loadStoreFromPath(backup);
         state.store = sanitizeStore(parsed);
-        console.warn('[WA-Deck] Recovered store from .backup');
+        console.warn('[OmniDeck] Recovered store from .backup');
         return;
       } catch (backupErr) {
-        console.warn('[WA-Deck] Backup also unreadable:', backupErr?.message || backupErr);
+        console.warn('[OmniDeck] Backup also unreadable:', backupErr?.message || backupErr);
         quarantineCorruptStoreFile(backup);
       }
     }
@@ -1074,8 +1108,19 @@ function nextTgIndex() {
   return max + 1;
 }
 
+function nextSgIndex() {
+  let max = 0;
+  for (const account of state.store.accounts) {
+    const match = String(account.name).match(/^SG_(\d+)$/i);
+    if (match) {
+      max = Math.max(max, Number(match[1] || 0));
+    }
+  }
+  return max + 1;
+}
+
 function partitionForAccount(accountId, type) {
-  const prefix = type === 'telegram' ? 'tg' : 'wa';
+  const prefix = type === 'telegram' ? 'tg' : (type === 'signal' ? 'sig' : 'wa');
   return `persist:${prefix}_${accountId}`;
 }
 
@@ -1438,7 +1483,10 @@ function accountToRuntimePayload(account = {}) {
     ...accountToView(account),
     type,
     partition: partitionForAccount(account.id, type),
-    url: type === 'telegram' ? 'https://web.telegram.org/a/' : 'https://web.whatsapp.com/',
+    // signal — без webview (нет веб-клиента), renderer показывает панель
+    url: type === 'telegram' ? 'https://web.telegram.org/a/'
+      : (type === 'signal' ? '' : 'https://web.whatsapp.com/'),
+    signalNumber: type === 'signal' ? String(account.signalNumber || '') : undefined,
   };
 }
 
@@ -1464,6 +1512,8 @@ async function setAccountFrozen(accountId, frozen) {
 
   account.frozen = Boolean(frozen);
   await saveStore();
+  // Signal: заморозка = стоп receive-процесса (аналог сноса webview)
+  if (account.type === 'signal') signalService?.setFrozen(account.id, account.frozen);
   return { ok: true, account: accountToView(account) };
 }
 
@@ -1566,6 +1616,7 @@ async function removeAccount(accountId) {
   if (idx < 0) return { ok: false, error: 'account_not_found' };
 
   const removedType = state.store.accounts[idx].type || 'whatsapp';
+  if (removedType === 'signal') signalService?.removeAccountCleanup(id);
   state.store.accounts.splice(idx, 1);
   if (state.store.accounts.length === 0) markIntentionalLastAccountRemoval();
   normalizeAccountOrder();
@@ -1631,6 +1682,17 @@ function buildBootstrap() {
       waUserAgent: WA_USER_AGENT,
     },
   };
+}
+
+/* Путь вложения signal-cli после realpath (симлинк не должен уводить наружу) */
+async function signalAttachmentPath(filePath) {
+  const attDir = path.join(os.homedir(), '.local', 'share', 'signal-cli', 'attachments');
+  try {
+    const real = await fs.realpath(path.resolve(String(filePath || '')));
+    return real.startsWith(attDir + path.sep) ? real : '';
+  } catch {
+    return '';
+  }
 }
 
 function guessMime(filePath) {
@@ -1929,7 +1991,12 @@ function createWindow() {
       delete params.disablewebsecurity;
     }
     const src = String(params?.src || '');
-    const allowed = src.startsWith('https://web.whatsapp.com/') || src.startsWith('https://web.telegram.org/');
+    // Split-браузер (persist:split_browser) — обычный браузерный webview,
+    // ему можно любой http(s)-адрес; about:blank — его ленивое создание.
+    const isSplitBrowser = String(params?.partition || '') === 'persist:split_browser';
+    const allowed = isSplitBrowser
+      ? (/^https?:\/\//.test(src) || src === 'about:blank' || src === '')
+      : (src.startsWith('https://web.whatsapp.com/') || src.startsWith('https://web.telegram.org/'));
     if (!allowed) {
       console.warn('[will-attach-webview] blocked src:', src);
       event.preventDefault();
@@ -1972,15 +2039,29 @@ function createWindow() {
       } catch { /* ignore */ }
       return;
     }
+    // Cmd/Ctrl+Shift+E — «вставить как человеческий набор». Как и остальные
+    // сквозные хоткеи, перехват в main: фокус почти всегда в композере guest.
+    if ((input.meta || input.control) && input.shift && !input.alt
+        && String(input?.code || '') === 'KeyE') {
+      event.preventDefault();
+      try {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('host-hotkey', { code: 'KeyE', shift: true });
+        }
+      } catch { /* ignore */ }
+      return;
+    }
     // Сквозные хоткеи: Cmd+1..9 / K / T / R / зум раньше умирали, как только
     // курсор оказывался в композере WhatsApp (т.е. большую часть дня) — host-
     // keydown в renderer их не видел. Тот же принцип, что у Esc и Cmd+U:
     // перехват в main, доставка одним каналом, физические коды ради RU.
     if ((input.meta || input.control) && !input.alt) {
       const code = String(input?.code || '');
-      const routable = !input.shift
-        && (/^Digit[0-9]$/.test(code) || code === 'KeyK' || code === 'KeyT'
-            || code === 'KeyR' || code === 'Minus' || code === 'Equal');
+      // Numpad и Shift+= (плюс на верхнем ряду) — тоже зум/выбор аккаунта
+      const isDigit = /^Digit[0-9]$/.test(code) || /^Numpad[0-9]$/.test(code);
+      const isZoom = code === 'Minus' || code === 'Equal' || code === 'NumpadAdd' || code === 'NumpadSubtract';
+      const routable = (!input.shift && (isDigit || code === 'KeyK' || code === 'KeyT' || code === 'KeyR' || isZoom))
+        || (input.shift && code === 'Equal'); // Cmd+Shift+= = Cmd++
       if (routable) {
         event.preventDefault();
         try {
@@ -2075,6 +2156,15 @@ function setupWebviewGuards() {
   app.on('web-contents-created', (_event, contents) => {
     if (contents.getType() !== 'webview') return;
 
+    // Split-браузер: обычный веб-сёрфинг, WA/TG-ограничения не применяются
+    // (origin-allowlist, WA user-agent, guest-preload). Определяется по
+    // partition-каталогу, как isTelegram() ниже.
+    const isSplitBrowser = (() => {
+      try {
+        return /[\\/]split_browser/.test(contents.session?.getStoragePath?.() || '');
+      } catch { return false; }
+    })();
+
     // Lock down permission requests on this webview's session (once per session).
     const ses = contents.session;
     if (ses && !_permissionConfiguredSessions.has(ses)) {
@@ -2088,15 +2178,19 @@ function setupWebviewGuards() {
       /* Guest→host bridge preload (see src/preload-webview.js). Session-level
          registration is untouched by the will-attach-webview hardening that
          strips attribute-level preloads a compromised renderer could set. */
-      try {
-        const preloadPath = path.join(__dirname, 'preload-webview.js');
-        if (typeof ses.registerPreloadScript === 'function') {
-          ses.registerPreloadScript({ type: 'frame', filePath: preloadPath });
-        } else if (typeof ses.setPreloads === 'function') {
-          ses.setPreloads([preloadPath]);
+      // Guest-preload — только чатовым webview: инжектить мост в произвольные
+      // сайты split-браузера незачем (лишняя поверхность).
+      if (!isSplitBrowser) {
+        try {
+          const preloadPath = path.join(__dirname, 'preload-webview.js');
+          if (typeof ses.registerPreloadScript === 'function') {
+            ses.registerPreloadScript({ type: 'frame', filePath: preloadPath });
+          } else if (typeof ses.setPreloads === 'function') {
+            ses.setPreloads([preloadPath]);
+          }
+        } catch (err) {
+          console.warn('[webview-preload] registration failed:', err?.message || err);
         }
-      } catch (err) {
-        console.warn('[webview-preload] registration failed:', err?.message || err);
       }
 
       /* Electron 43 changed the default download flow: without a will-download
@@ -2133,7 +2227,11 @@ function setupWebviewGuards() {
     };
 
     // Only set WhatsApp user-agent for WhatsApp webviews
-    if (!isTelegram()) {
+    if (!isTelegram() && !isSplitBrowser) {
+      contents.setUserAgent(WA_USER_AGENT);
+    } else if (isSplitBrowser) {
+      // Дефолтный UA содержит «Electron/…» — Google-логины и часть сайтов
+      // такие клиенты отбивают; отдаём чистый Chrome той же версии
       contents.setUserAgent(WA_USER_AGENT);
     }
 
@@ -2144,20 +2242,52 @@ function setupWebviewGuards() {
     // page reports visibilityState='hidden' (which our display:none does).
     try { contents.setBackgroundThrottling(false); } catch { /* older Electron: no-op */ }
 
+    // Cmd/Ctrl в момент клика по ссылке = «открыть наоборот» (сплит ↔ внешний
+    // браузер, как у Franz). Модификатора в setWindowOpenHandler нет, поэтому
+    // его состояние трекается по клавиатурным событиям guest-а.
+    let _modClickDown = false;
+    let _modClickTs = 0;
+    contents.on('before-input-event', (_e, input) => {
+      _modClickDown = Boolean(input?.meta || input?.control);
+      _modClickTs = Date.now();
+    });
+    // Срок годности флага: keyup мог уйти мимо этого webContents (фокус увело
+    // открытие внешнего браузера) — иначе «наоборот» залипал до следующей клавиши
+    const modFlipActive = () => _modClickDown && (Date.now() - _modClickTs < 3000);
+
     contents.setWindowOpenHandler(({ url }) => {
-      safeOpenExternal(url);
+      const dest = String(url || '');
+      if (isSplitBrowser) {
+        // target=_blank внутри split-браузера открываем в нём же (одна вкладка)
+        if (/^https?:\/\//.test(dest)) contents.loadURL(dest).catch(() => {});
+      } else if (/^https?:\/\//.test(dest) && mainWindow && !mainWindow.isDestroyed()) {
+        // Ссылка из чата: renderer решает — split-панель или внешний браузер
+        mainWindow.webContents.send('guest-link', { url: dest, flip: modFlipActive() });
+      } else {
+        safeOpenExternal(dest);
+      }
       return { action: 'deny' };
     });
 
     const enforceOriginAllowlist = (event, url) => {
+      if (isSplitBrowser) {
+        // «куда угодно» в пределах веба: file:// и прочие схемы — нет
+        if (!/^https?:/i.test(String(url || ''))) event.preventDefault();
+        return;
+      }
       const dest = String(url || '');
-      if (isTelegram()) {
-        if (!dest.startsWith('https://web.telegram.org')) {
-          event.preventDefault();
-        }
-      } else {
-        if (!dest.startsWith('https://web.whatsapp.com')) {
-          event.preventDefault();
+      // Строгое сравнение origin: startsWith без слэша пропускал
+      // https://web.whatsapp.com.attacker.tld/...
+      let origin = '';
+      try { origin = new URL(dest).origin; } catch { origin = ''; }
+      const allowed = isTelegram() ? 'https://web.telegram.org' : 'https://web.whatsapp.com';
+      if (origin !== allowed) {
+        event.preventDefault();
+        /* Ссылка без target=_blank уводила бы webview с мессенджера — но и
+           молча гасить её нельзя (клик «не делал ничего»). Отдаём её деке:
+           откроется в сплит-панели или во внешнем браузере, как обычную. */
+        if (/^https?:\/\//.test(dest) && mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('guest-link', { url: dest, flip: modFlipActive() });
         }
       }
     };
@@ -2173,6 +2303,7 @@ function setupWebviewGuards() {
         mainWindow.webContents.send('webview-crashed', {
           reason: String(details?.reason || 'unknown'),
           exitCode: details?.exitCode || 0,
+          webContentsId: contents.id, // renderer найдёт упавший webview по id
         });
       }
     });
@@ -2442,7 +2573,7 @@ const macUpdate = {
 /* HTTPS GET that follows redirects (GitHub release assets redirect to S3). */
 function httpsGetFollow(url, redirectsLeft = 5) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { headers: { 'User-Agent': 'WA-Deck-Updater' } }, (res) => {
+    const req = https.get(url, { headers: { 'User-Agent': 'OmniDeck-Updater' } }, (res) => {
       const code = Number(res.statusCode || 0);
       if (code >= 300 && code < 400 && res.headers.location && redirectsLeft > 0) {
         res.resume();
@@ -2695,12 +2826,13 @@ async function installMacDownloadedUpdate() {
   // просто не открылось бы снова — «краш»); ход пишется в лог для диагностики.
   const script = [
     '#!/bin/bash',
-    '# WA-Deck self-update: swap the .app bundle after the app process exits.',
+    '# OmniDeck self-update: swap the .app bundle after the app process exits.',
     `APP_PID=${process.pid}`,
     `ZIP_PATH=${shellQuote(macUpdate.zipPath)}`,
     `APP_PATH=${shellQuote(appPath)}`,
     `STAGING_DIR=${shellQuote(stagingDir)}`,
     `OLD_DIR=${shellQuote(oldDir)}`,
+    `RENAME_MARK=${shellQuote(path.join(app.getPath('userData'), '.bundle-renamed'))}`,
     `exec >>${shellQuote(logPath)} 2>&1`,
     'echo "[wadeck-update] start $(date)"',
     '',
@@ -2710,12 +2842,28 @@ async function installMacDownloadedUpdate() {
     'rm -rf "$STAGING_DIR" "$OLD_DIR"',
     'mkdir -p "$STAGING_DIR" "$OLD_DIR"',
     'SWAPPED=0',
+    'RENAMED=0',
     'if /usr/bin/ditto -xk "$ZIP_PATH" "$STAGING_DIR"; then',
     '  NEW_APP=$(/usr/bin/find "$STAGING_DIR" -maxdepth 1 -name "*.app" -print -quit)',
+    '  # Имя бандла берём из самой сборки: после ребрендинга старый файл',
+    '  # назывался «WA Deck.app», новый должен лечь как «OmniDeck.app».',
+    '  NEW_BASE=$(/usr/bin/basename "$NEW_APP")',
+    '  TARGET_DIR=$(/usr/bin/dirname "$APP_PATH")',
+    '  FINAL_PATH="$TARGET_DIR/$NEW_BASE"',
     '  if [ -n "$NEW_APP" ] && mv "$APP_PATH" "$OLD_DIR/"; then',
-    '    if mv "$NEW_APP" "$APP_PATH"; then',
-    '      /usr/bin/xattr -dr com.apple.quarantine "$APP_PATH" 2>/dev/null',
+    '    # Если рядом уже лежит бандл с новым именем (ставили руками) — тоже в сторону',
+    '    if [ "$FINAL_PATH" != "$APP_PATH" ] && [ -e "$FINAL_PATH" ]; then',
+    '      mv "$FINAL_PATH" "$OLD_DIR/prev-$NEW_BASE" 2>/dev/null',
+    '    fi',
+    '    if mv "$NEW_APP" "$FINAL_PATH"; then',
+    '      /usr/bin/xattr -dr com.apple.quarantine "$FINAL_PATH" 2>/dev/null',
     '      SWAPPED=1',
+    '      if [ "$FINAL_PATH" != "$APP_PATH" ]; then',
+    '        RENAMED=1',
+    '        # Маркер для приложения: покажет подсказку про значок в доке',
+    '        /usr/bin/touch "$RENAME_MARK" 2>/dev/null',
+    '      fi',
+    '      APP_PATH="$FINAL_PATH"',
     '    else',
     '      echo "[wadeck-update] final mv failed — rolling back"',
     '      mv "$OLD_DIR"/*.app "$APP_PATH" 2>/dev/null',
@@ -2732,7 +2880,7 @@ async function installMacDownloadedUpdate() {
     'else',
     '  echo "[wadeck-update] APP_PATH missing after update — cannot relaunch"',
     'fi',
-    'echo "[wadeck-update] done swapped=$SWAPPED $(date)"',
+    'echo "[wadeck-update] done swapped=$SWAPPED renamed=$RENAMED $(date)"',
     '# OLD_DIR стираем ТОЛЬКО если приложение на месте: при двойном сбое mv',
     '# (rollback тоже не прошёл) там лежит единственная копия .app.',
     'if [ -d "$APP_PATH" ]; then',
@@ -2931,15 +3079,16 @@ function registerIpc() {
   handle('bootstrap', async () => buildBootstrap());
 
   handle('add-account', async (_event, type) => {
-    const accountType = (type === 'telegram') ? 'telegram' : 'whatsapp';
-    const isTg = accountType === 'telegram';
-    const idx = isTg ? nextTgIndex() : nextWpIndex();
-    const prefix = isTg ? 'tg' : 'wa';
+    const accountType = ['telegram', 'signal'].includes(type) ? type : 'whatsapp';
+    const idx = accountType === 'telegram' ? nextTgIndex()
+      : (accountType === 'signal' ? nextSgIndex() : nextWpIndex());
+    const prefix = accountType === 'telegram' ? 'tg' : (accountType === 'signal' ? 'sig' : 'wa');
+    const namePrefix = accountType === 'telegram' ? 'TG' : (accountType === 'signal' ? 'SG' : 'WP');
     const maxOrder = state.store.accounts.reduce((max, acc) => Math.max(max, Number(acc.order || 0)), 0);
     const account = {
       id: `${prefix}_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`,
       type: accountType,
-      name: isTg ? `TG_${idx}` : `WP_${idx}`,
+      name: `${namePrefix}_${idx}`,
       color: pickColor(idx),
       iconPath: '',
       frozen: false,
@@ -3168,7 +3317,7 @@ function registerIpc() {
       return { ok: false, error: 'bad_target' };
     }
     // fire-and-forget: прогресс и результат рисуются плашкой у пузыря
-    transcribeVoiceAt(contents, voiceId, mainWindow);
+    transcribeVoiceAt(contents, voiceId, mainWindow, payload?.kind === 'video' ? 'video' : 'voice');
     return { ok: true };
   });
 
@@ -3532,6 +3681,142 @@ function registerIpc() {
     return { ok: true, text: clipboard.readText() };
   });
 
+  handle('open-external', async (_event, url) => {
+    safeOpenExternal(url); // валидирует http/https сам
+    return { ok: true };
+  });
+
+  /* ── Signal (signal-cli гибрид) ── */
+  handle('signal-link-start', async (_event, payload) => {
+    return signalService?.startLink(String(payload?.accountId || '')) || { ok: false, error: 'not_ready' };
+  });
+  handle('signal-install-cli', async (_event, payload) => {
+    return signalService?.installCli(String(payload?.accountId || '')) || { ok: false, error: 'not_ready' };
+  });
+  handle('signal-link-cancel', async () => {
+    signalService?.cancelLink();
+    return { ok: true };
+  });
+  handle('signal-get-status', async () => {
+    return signalService?.getStatuses() || { ok: false, error: 'not_ready' };
+  });
+  handle('signal-load-messages', async () => {
+    return signalService?.getMessages() || { ok: false, error: 'not_ready' };
+  });
+  handle('signal-list-contacts', async (_event, payload) => {
+    if (!signalService) return { ok: false, error: 'not_ready' };
+    return signalService.listContacts(String(payload?.accountId || ''));
+  });
+  handle('signal-list-groups', async (_event, payload) => {
+    if (!signalService) return { ok: false, error: 'not_ready' };
+    return signalService.listGroups(String(payload?.accountId || ''));
+  });
+  handle('signal-read-attachment', async (_event, filePath) => {
+    const resolved = await signalAttachmentPath(filePath);
+    if (!resolved) return { ok: false, error: 'forbidden' };
+    try {
+      const stat = await fs.stat(resolved);
+      // Кап 24МБ: дальше renderer раздувает файл в PCM и вешает весь UI
+      if (stat.size > 24 * 1024 * 1024) return { ok: false, error: 'too_large' };
+      const buf = await fs.readFile(resolved);
+      return { ok: true, b64: buf.toString('base64') };
+    } catch (e) {
+      return { ok: false, error: String(e?.message || e) };
+    }
+  });
+  handle('signal-transcribe-wav', async (_event, payload) => {
+    return transcribeWavBase64(String(payload?.wav || ''), mainWindow, (pct) => {
+      try {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('signal-event', { kind: 'model-progress', pct });
+        }
+      } catch { /* ignore */ }
+    });
+  });
+  handle('signal-set-transcript', async (_event, payload) => {
+    if (!signalService) return { ok: false, error: 'not_ready' };
+    return signalService.setTranscript(
+      String(payload?.accountId || ''), Number(payload?.ts) || 0,
+      clampString(payload?.text, 4000));
+  });
+  handle('signal-delete-chat', async (_event, payload) => {
+    if (!signalService) return { ok: false, error: 'not_ready' };
+    return signalService.deleteChat(String(payload?.accountId || ''), {
+      groupId: String(payload?.groupId || ''),
+      recipient: String(payload?.recipient || ''),
+      recipients: Array.isArray(payload?.recipients) ? payload.recipients.map(String).slice(0, 8) : [],
+    });
+  });
+  handle('signal-restart', async (_event, payload) => {
+    if (!signalService) return { ok: false, error: 'not_ready' };
+    return signalService.restartDaemon(String(payload?.accountId || ''));
+  });
+  handle('signal-save-attachment', async (_event, filePath) => {
+    const resolved = await signalAttachmentPath(filePath);
+    if (!resolved) return { ok: false, error: 'forbidden' };
+    if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: 'no_window' };
+    const chosen = await dialog.showSaveDialog(mainWindow, {
+      title: 'Сохранить файл',
+      defaultPath: path.join(app.getPath('downloads'), path.basename(resolved)),
+    });
+    if (chosen.canceled || !chosen.filePath) return { ok: false, error: 'canceled' };
+    try {
+      await fs.copyFile(resolved, chosen.filePath);
+      return { ok: true, path: chosen.filePath };
+    } catch (e) {
+      return { ok: false, error: String(e?.message || e) };
+    }
+  });
+  handle('signal-open-attachment', async (_event, filePath) => {
+    // Только файлы из каталога вложений signal-cli — не общий «открой что угодно»
+    const resolved = await signalAttachmentPath(filePath);
+    if (!resolved) return { ok: false, error: 'forbidden' };
+    shell.openPath(resolved).catch(() => {});
+    return { ok: true };
+  });
+  handle('signal-send', async (_event, payload) => {
+    if (!signalService) return { ok: false, error: 'not_ready' };
+    return signalService.send(String(payload?.accountId || ''), {
+      recipient: String(payload?.recipient || ''),
+      groupId: String(payload?.groupId || ''),
+      text: clampString(payload?.text, LIMITS.CLIPBOARD_TEXT),
+      quote: payload?.quote && typeof payload.quote === 'object' ? payload.quote : undefined,
+      attachments: await (async () => {
+        // Отправлять можно: файлы из диалога (скрепка) и вложения signal-cli (пересылка)
+        const raw = Array.isArray(payload?.attachments) ? payload.attachments : [];
+        const sigDir = path.join(os.homedir(), '.local', 'share', 'signal-cli', 'attachments');
+        const out = [];
+        for (const item of raw.slice(0, 10)) {
+          const pth = path.resolve(String(item?.path || item || ''));
+          if (!pth) continue;
+          if (pth.startsWith(sigDir + path.sep) || await isAttachmentPathAllowed(pth)) out.push(pth);
+        }
+        return out;
+      })(),
+    });
+  });
+  handle('signal-react', async (_event, payload) => {
+    if (!signalService) return { ok: false, error: 'not_ready' };
+    return signalService.sendReaction(String(payload?.accountId || ''), {
+      recipient: String(payload?.recipient || ''),
+      groupId: String(payload?.groupId || ''),
+      emoji: String(payload?.emoji || '').slice(0, 8),
+      targetAuthor: String(payload?.targetAuthor || ''),
+      targetTs: Number(payload?.targetTs) || 0,
+      remove: Boolean(payload?.remove),
+    });
+  });
+  handle('open-signal-desktop', async () => {
+    // sgnl:// зарегистрирован Signal Desktop на всех платформах; на macOS
+    // `open -a` надёжнее (протокол молча умирает, если Signal не установлен)
+    if (process.platform === 'darwin') {
+      spawn('open', ['-a', 'Signal'], { stdio: 'ignore' }).on('error', () => {});
+    } else {
+      shell.openExternal('sgnl://').catch(() => {});
+    }
+    return { ok: true };
+  });
+
   handle('set-clipboard-text', async (_event, text) => {
     clipboard.writeText(clampString(text, LIMITS.CLIPBOARD_TEXT));
     return { ok: true };
@@ -3563,6 +3848,7 @@ function registerIpc() {
   });
 
   handle('install-downloaded-update', async () => {
+    try { signalService?.stopAll(); } catch { /* демоны не должны пережить рестарт */ }
     if (!app.isPackaged) {
       return { ok: false, error: 'not_packaged' };
     }
@@ -3768,7 +4054,7 @@ async function cleanupOrphanPartitions() {
   }
   const liveIds = new Set(
     (state.store.accounts || []).map((acc) => {
-      const prefix = (acc.type === 'telegram') ? 'tg' : 'wa';
+      const prefix = acc.type === 'telegram' ? 'tg' : (acc.type === 'signal' ? 'sig' : 'wa');
       // Chromium URL-encodes the partition name; persist:wa_X becomes "wa_X"
       // on disk (the "persist:" prefix is stripped). Match against bare IDs.
       return `${prefix}_${acc.id}`;
@@ -3778,7 +4064,7 @@ async function cleanupOrphanPartitions() {
   let totalBytes = 0;
   for (const entry of entries) {
     // Only consider names that match our scheme. Leave anything else alone.
-    if (!/^(wa|tg)_/.test(entry)) continue;
+    if (!/^(wa|tg|sig)_/.test(entry)) continue;
     if (liveIds.has(entry)) continue;
     const full = path.join(partitionsDir, entry);
     try {
@@ -3832,6 +4118,7 @@ function setupPowerMonitor() {
       setTimeout(() => {
         try {
           mainWindow.webContents.send('system-resumed-after-sleep', { suspendedMs: wasSuspendedFor });
+        try { signalService?.resumeAfterSleep(); } catch { /* ignore */ }
         } catch (err) {
           console.warn('[power] failed to notify renderer:', err?.message || err);
         }
@@ -3897,9 +4184,20 @@ async function bootstrap() {
   // Boot-time save must not kill bootstrap on a full disk — log and continue.
   await saveStore().catch((err) => console.error('[bootstrap] initial save failed:', err));
 
+  // Восстановить разрешённые диалогом пути (отложенные вложения)
+  for (const rp of (Array.isArray(state.store.pickedPaths) ? state.store.pickedPaths : [])) {
+    _dialogPickedPaths.add(String(rp));
+  }
   setupWebviewGuards();
+  signalService = initSignal({
+    getMainWindow: () => mainWindow,
+    getAccounts: () => state.store.accounts,
+    saveStore,
+    storePath: path.join(state.paths.userData, 'signal-messages.json'),
+  });
   registerIpc();
   createWindow();
+  signalService.ensureDaemons();
 
   /* GPU / utility process death. The GPU process is shared by the whole app;
      after a long session (many always-hot webview compositor layers exhaust GPU
@@ -3915,6 +4213,20 @@ async function bootstrap() {
       recoverMainWindow('gpu-process-gone');
     }
   });
+
+  // Обновление переименовало бандл (WA Deck.app → OmniDeck.app): значок в
+  // доке помнит старый путь, поэтому один раз подсказываем его обновить
+  try {
+    const mark = path.join(state.paths.userData, '.bundle-renamed');
+    if (fsSync.existsSync(mark)) {
+      fsSync.unlinkSync(mark);
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('bundle-renamed');
+        }
+      }, 4000);
+    }
+  } catch { /* подсказка необязательна */ }
 
   setupAutoUpdater();
   scheduleBackgroundUpdateChecks();
@@ -3945,10 +4257,16 @@ if (addSingleInstanceGuard()) {
   });
 
   /* Flush pending store writes before exit */
+  // SIGTERM/SIGINT (pkill, Ctrl+C) убивали Electron мимо before-quit —
+  // signal-cli-демоны оставались сиротами и съедали входящие у нового запуска
+  process.on('SIGTERM', () => { try { signalService?.stopAll(); killWhisper(); } catch { /* ignore */ } app.quit(); });
+  process.on('SIGINT', () => { try { signalService?.stopAll(); killWhisper(); } catch { /* ignore */ } app.quit(); });
+
   app.on('before-quit', async (event) => {
     if (_appIsQuitting) return;
     _appIsQuitting = true;
     event.preventDefault();
+    try { signalService?.stopAll(); killWhisper(); } catch { /* ignore */ }
     try {
       // Bounded wait: a wedged disk write (stalled network volume, hung
       // fsync) must not make the app unquittable.

@@ -225,7 +225,10 @@ async function resetAccountFromMenu() {
   if (!account) return;
 
   const fallbackOrder = state.accounts.findIndex((row) => row.id === accountId) + 1;
-  const defaultName = `WP_${Number(account.order || fallbackOrder || 1)}`;
+  // Префикс по типу: раньше Telegram и Signal сбрасывались в «WP_N» и лезли
+  // в нумерацию WhatsApp
+  const prefix = account.type === 'telegram' ? 'TG' : (account.type === 'signal' ? 'SG' : 'WP');
+  const defaultName = `${prefix}_${Number(account.order || fallbackOrder || 1)}`;
 
   const iconResponse = await window.waDeck.setAccountIcon({ accountId, iconPath: '' });
   if (!iconResponse?.ok || !iconResponse.account) {
