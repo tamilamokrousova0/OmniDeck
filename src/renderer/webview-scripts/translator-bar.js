@@ -311,7 +311,7 @@ function translatorBarScript(token) {
       track.appendChild(knob);
 
       const labelEl = document.createElement('span');
-      labelEl.textContent = 'Авто вх. → Русский';
+      labelEl.textContent = 'Авто чат → Русский';
 
       wrap.appendChild(track);
       wrap.appendChild(labelEl);
@@ -332,7 +332,7 @@ function translatorBarScript(token) {
           track.style.background = '#d1d5db';
           knob.style.left = '1px';
           knob.style.background = '#ffffff';
-          labelEl.textContent = 'Авто вх. → Русский';
+          labelEl.textContent = 'Авто чат → Русский';
         }
       }
       wrap.__paint = paint;
@@ -465,19 +465,41 @@ function translatorBarScript(token) {
       return String(composer.innerText || composer.textContent || '').trim();
     }
 
-    /* Кнопка «Перевести»: всегда весь композер с заменой текста. Раньше
-       выделение имело приоритет — двойной клик по слову / Shift-выделение
-       перед нажатием переводили и заменяли только кусок, остальное оставалось
-       на исходном языке («переводит половину»). Отправку оператор делает вручную. */
+    /* Кнопка «Перевести». Три случая, по убыванию явности:
+       1) выделение ВНУТРИ композера → переводим только его (замена выделения);
+          выделение в ленте чата не считается — иначе перевод чужого сообщения
+          дописывался в композер («переводит половину»);
+       2) композер начинается с прошлого вставленного перевода → дописанный
+          хвост переводим отдельно, готовый перевод не трогаем (иначе он
+          уезжал в Google второй раз и «цеплялся» к новому тексту);
+       3) иначе — весь композер с заменой. Отправку оператор делает вручную. */
+    const normWsC = (v) => String(v || '').replace(/\\s+/g, ' ').trim();
+    let lastInserted = '';   // фактический текст композера после последней вставки
+    let pendingPrefix = '';  // что вернуть перед переводом хвоста (случай 2)
     function doTranslate() {
+      const composer = getComposer();
       const text = getComposerText();
-      if (!text) return;
-      __waDeckEmit('TRANSLATE', JSON.stringify({
-        text: text,
-        from: outgoingFrom,
-        to: outgoingTo,
-        replaceAll: true,
-      }));
+      if (!composer || !text) return;
+      pendingPrefix = '';
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount && !sel.isCollapsed
+          && composer.contains(sel.anchorNode) && composer.contains(sel.focusNode)) {
+        const part = sel.toString().trim();
+        if (part) {
+          __waDeckEmit('TRANSLATE', JSON.stringify({ text: part, from: outgoingFrom, to: outgoingTo, replaceAll: false }));
+          return;
+        }
+      }
+      let body = text;
+      if (lastInserted && normWsC(text).indexOf(normWsC(lastInserted)) === 0) {
+        const tail = normWsC(text).slice(normWsC(lastInserted).length).trim();
+        if (!tail) return; // ничего нового не дописано
+        const rawTail = text.slice(lastInserted.length);
+        const glue = /^\\s*\\n/.test(rawTail) ? '\\n' : ' ';
+        pendingPrefix = lastInserted + glue;
+        body = tail;
+      }
+      __waDeckEmit('TRANSLATE', JSON.stringify({ text: body, from: outgoingFrom, to: outgoingTo, replaceAll: true }));
     }
 
     window.__waDeckInsertTranslation = function (translated, replaceAll) {
@@ -487,6 +509,8 @@ function translatorBarScript(token) {
         emitHealth({ script: 'translator-bar', ok: false, detail: 'insert_no_composer' });
         return false;
       }
+      if (replaceAll && pendingPrefix) translated = pendingPrefix + translated;
+      pendingPrefix = '';
       composer.focus();
       if (replaceAll) {
         // Выделяем весь текст композера — insertText заменит его переводом,
@@ -524,7 +548,12 @@ function translatorBarScript(token) {
       }
       if (!claimed && !isInserted()) {
         emitHealth({ script: 'translator-bar', ok: false, detail: 'insert_translation_failed' });
+        return false;
       }
+      // Запоминаем то, что реально оказалось в композере (Lexical может
+      // переформатировать пробелы), чтобы следующий «Перевести» узнал префикс.
+      setTimeout(() => { try { lastInserted = getComposerText(); } catch {} }, 80);
+      return true;
     };
 
     // ========== Bar visibility ==========
@@ -599,21 +628,22 @@ function translatorBarScript(token) {
     // robust for wide bubbles whose centre crosses the midline. RTL layouts
     // invert the mapping. If layout is not ready yet (width 0) we return
     // false and let the next sweep retry rather than risk mislabelling.
-    function isIncomingRow(row) {
+    // 'in' | 'out' | null (разметка ещё не измерима — повторить на следующем свипе)
+    function rowDirection(row) {
       const bubble = getBubbleContainer(row);
-      if (!bubble || bubble === row) return false;
+      if (!bubble || bubble === row) return null;
       const br = bubble.getBoundingClientRect();
-      if (!br || br.width === 0) return false;
+      if (!br || br.width === 0) return null;
       const main = document.querySelector('#main');
       const mr = main ? main.getBoundingClientRect() : null;
-      if (!mr || mr.width === 0) return false;
+      if (!mr || mr.width === 0) return null;
       const leftGap = br.left - mr.left;
       const rightGap = mr.right - br.right;
       let incoming = leftGap < rightGap;
       try {
         if (getComputedStyle(document.body).direction === 'rtl') incoming = !incoming;
       } catch {}
-      return incoming;
+      return incoming ? 'in' : 'out';
     }
 
     // Collect candidate message rows under root (the full chat on a sweep, or a
@@ -863,6 +893,7 @@ function translatorBarScript(token) {
       const entry = translatedCache.get(row);
       if (entry && entry.state === 'pending') return;
       if (entry && entry.state === 'dismissed') return;
+      if (entry && entry.state === 'skipped') return;
       if (entry && entry.state === 'failed') {
         // Retry failed rows on the periodic sweep: 30s backoff between
         // attempts, at most 3 attempts total, then terminal.
@@ -874,16 +905,17 @@ function translatorBarScript(token) {
         if (!hasOverlay(row)) renderOverlay(row, entry.translated);
         return;
       }
-      // Direction filter: sweep and observer hand us ALL message rows; only
-      // translate incoming (left-aligned) ones. Outgoing rows are skipped WITHOUT
-      // caching a verdict, so a row that is briefly unmeasurable (width 0 during
-      // layout) is retried on the next sweep instead of being stuck.
-      if (!isIncomingRow(row)) return;
+      // Переводим и входящие, и исходящие (оператор пишет на языке контакта —
+      // ему нужен русский под обоими). Неизмеримый ряд (width 0 в момент
+      // layout) НЕ кэшируем — повторим на следующем свипе.
+      const dir = rowDirection(row);
+      if (!dir) return;
       const text = getMessageText(row);
       if (!text) return;
       const cacheKey = INCOMING_TARGET + '|' + text;
       const cachedTranslated = textCacheGet(cacheKey);
       if (cachedTranslated) {
+        if (normWsC(cachedTranslated) === normWsC(text)) { translatedCache.set(row, { state: 'skipped' }); return; }
         translatedCache.set(row, { state: 'done', translated: cachedTranslated });
         renderOverlay(row, cachedTranslated);
         return;
@@ -898,8 +930,15 @@ function translatorBarScript(token) {
         // Populate the text cache even if the row got recycled meanwhile —
         // the next sweep finds the recreated node and reuses the result.
         textCacheSet(cacheKey, result.translated);
-        try { noteDetectedLang(result.detected); } catch {}
+        // Язык контакта угадываем только по ВХОДЯЩИМ: свои сообщения на
+        // языке контакта удвоили бы счётчик, а на русском — сбили бы его.
+        if (dir === 'in') { try { noteDetectedLang(result.detected); } catch {} }
         if (!row.isConnected) return;
+        // Сообщение уже на русском (своё, не переведённое) — плашка-дубль не нужна
+        if (normWsC(result.translated) === normWsC(text)) {
+          translatedCache.set(row, { state: 'skipped' });
+          return;
+        }
         translatedCache.set(row, { state: 'done', translated: result.translated });
         renderOverlay(row, result.translated);
       });
