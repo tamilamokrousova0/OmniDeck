@@ -5,6 +5,7 @@ const HAS_BRIEF = process.argv.includes('--omnideck-brief');
 
 contextBridge.exposeInMainWorld('waDeck', {
   lite: IS_LITE,
+  mac: process.platform === 'darwin',
   briefAvailable: HAS_BRIEF,
   bootstrap: () => ipcRenderer.invoke('bootstrap'),
   addAccount: (type) => ipcRenderer.invoke('add-account', type),

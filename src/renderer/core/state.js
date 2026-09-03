@@ -66,6 +66,7 @@ const state = {
    успевают мигнуть. Что именно скрыто, смотри в styles.css по `body.is-lite`. */
 const LITE = Boolean(window.waDeck?.lite);
 if (LITE) document.body.classList.add('is-lite');
+if (window.waDeck?.mac) document.body.classList.add('is-mac');
 /* Бриф показываем только когда в сборке есть llama-server. */
 if (!window.waDeck?.briefAvailable) document.body.classList.add('no-brief');
 

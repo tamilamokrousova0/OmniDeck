@@ -990,6 +990,17 @@ html[data-theme='light'] .account-type-tg {
   z-index: 1;
 }
 
+/* macOS: неактивных гостей НЕ держим горячими. opacity:0 выше — Windows-костыль
+   (ANGLE→DirectX теряет слой при display:none), Metal перерастеризует незаметно.
+   А цена на маке — 10-20 полноэкранных прозрачных слоёв WhatsApp, композитящихся
+   каждый кадр: GPU-всплески и нагрев, Chromium 152 + Tahoe их усилили.
+   Keep-alive не страдает: флаги Chromium + backgroundThrottling=no + spoof
+   visibilityState в keep-alive.js держат сокет WA живым и в display:none —
+   ровно так дека жила до 0.7.9. */
+body.is-mac .webviews webview:not(.active) {
+  display: none;
+}
+
 .hub-screen {
   position: absolute;
   inset: 0;
