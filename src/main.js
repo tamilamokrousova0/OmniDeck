@@ -1963,6 +1963,10 @@ function createWindow() {
     title: APP_TITLE,
     icon: fsSync.existsSync(APP_ICON_PNG_PATH) ? APP_ICON_PNG_PATH : undefined,
     backgroundColor: '#080f1a',
+    // macOS 26 Tahoe: WindowServer жжёт GPU на тени окна (electron/electron#48311,
+    // microsoft/vscode#267724). Тень выключаем на Darwin 25+ — тот же эффект, что
+    // у обхода CHROME_HEADLESS=1, но без env и переживает перезагрузку.
+    hasShadow: !(process.platform === 'darwin' && parseInt(os.release(), 10) >= 25),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -2040,20 +2044,25 @@ function createWindow() {
    webview-гость: когда курсор стоит в поле ввода мессенджера, клавиатурные
    события уходят в его webContents и до окна деки не доходят вовсе —
    именно поэтому Cmd+Shift+E «не работал» из чата. */
-function routeHostHotkey(event, input) {
+function routeHostHotkey(event, input, fromGuest = false) {
     if (String(input?.type || '').toLowerCase() !== 'keydown') return;
-    const sendToRenderer = (channel) => {
+    const sendToRenderer = (channel, payload) => {
       try {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send(channel);
+          mainWindow.webContents.send(channel, payload);
         }
       } catch {
         // ignore channel send errors
       }
     };
     if (String(input?.key || '') === 'Escape') {
-      event.preventDefault();
-      sendToRenderer('host-escape-pressed');
+      /* В госте Esc НЕ глушим: он нужен самому WhatsApp (закрыть медиа-
+         просмотр, снять цитату). Раньше глушили и пересылали обратно через
+         sendInputEvent — но синтетический keyDown снова попадает сюда же и
+         снова глушится, до страницы Esc не доходил никогда. Renderer по
+         fromGuest знает, что пересылать в гость уже нечего. */
+      if (!fromGuest) event.preventDefault();
+      sendToRenderer('host-escape-pressed', { fromGuest });
       return;
     }
     // Cmd/Ctrl+U — следующий непрочитанный. Перехват здесь, а не в renderer:
@@ -2280,7 +2289,7 @@ function setupWebviewGuards() {
       // Курсор в поле ввода мессенджера — клавиши идут СЮДА, а не в окно деки:
       // без этой строки сквозные хоткеи (Cmd+K/T/R/U, Cmd+Shift+E, F1, Esc)
       // из чата не срабатывали вовсе
-      routeHostHotkey(event, input);
+      routeHostHotkey(event, input, true);
     });
     // Срок годности флага: keyup мог уйти мимо этого webContents (фокус увело
     // открытие внешнего браузера) — иначе «наоборот» залипал до следующей клавиши

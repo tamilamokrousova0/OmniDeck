@@ -89,7 +89,7 @@ contextBridge.exposeInMainWorld('waDeck', {
   },
   onHostEscape: (callback) => {
     if (typeof callback !== 'function') return () => {};
-    const listener = () => callback();
+    const listener = (_event, payload) => callback(payload || {});
     ipcRenderer.on('host-escape-pressed', listener);
     return () => ipcRenderer.removeListener('host-escape-pressed', listener);
   },

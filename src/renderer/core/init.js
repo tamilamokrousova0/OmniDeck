@@ -119,7 +119,7 @@ async function init() {
   }
   if (typeof window.waDeck.onHostEscape === 'function') {
     if (state.hostEscapeUnsubscribe) state.hostEscapeUnsubscribe();
-    state.hostEscapeUnsubscribe = window.waDeck.onHostEscape(() => {
+    state.hostEscapeUnsubscribe = window.waDeck.onHostEscape((payload) => {
       // The search palette owns Escape while open — don't also reset the UI.
       if (window.WaDeckGlobalSearch?.isOpen?.()) {
         window.WaDeckGlobalSearch.close();
@@ -132,7 +132,9 @@ async function init() {
         return;
       }
       const closedSomething = handleEscapeUiReset();
-      if (!closedSomething) {
+      // Esc из гостя main не глушит — WhatsApp его уже получил, пересылать
+      // нечего (пересылка сюда же и возвращалась бы: бесконечный пинг-понг).
+      if (!closedSomething && !payload?.fromGuest) {
         // Ни один слой дека не был открыт — Esc принадлежит WhatsApp (снять
         // reply-цитату, закрыть поиск чатов). Пробрасываем в активный webview
         // нативным вводом, иначе перехват в main его просто съедает.

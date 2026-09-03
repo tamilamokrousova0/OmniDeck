@@ -43,6 +43,7 @@ function translatorBarScript(token) {
       { code: 'nl', label: 'Нидерландский' },
       { code: 'it', label: 'Итальянский' },
       { code: 'no', label: 'Норвежский' },
+      { code: 'da', label: 'Датский' },
       { code: 'sv', label: 'Шведский' },
       { code: 'fi', label: 'Финский' },
     ];
@@ -221,9 +222,8 @@ function translatorBarScript(token) {
       ].join(';');
       translateBtn.addEventListener('mouseenter', () => { translateBtn.style.background = '#16a34a'; });
       translateBtn.addEventListener('mouseleave', () => { translateBtn.style.background = '#22c55e'; });
-      // Chromium collapses the composer's text selection on mousedown before
-      // click fires — without preventDefault, getSelectedText() inside
-      // doTranslate() sees an empty selection and the button silently no-ops.
+      // preventDefault на mousedown держит фокус в композере: без него клик
+      // по кнопке уводит фокус, и insertText с переводом падает мимо поля.
       translateBtn.addEventListener('mousedown', (e) => { e.preventDefault(); });
       translateBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -459,29 +459,24 @@ function translatorBarScript(token) {
       );
     }
 
-    function getSelectedText() {
-      const sel = window.getSelection();
-      if (!sel || sel.rangeCount === 0) return '';
-      return sel.toString().trim();
-    }
-
     function getComposerText() {
       const composer = getComposer();
       if (!composer) return '';
       return String(composer.innerText || composer.textContent || '').trim();
     }
 
-    /* Кнопка «Перевести»: переводит выделение, а если ничего не выделено — весь
-       композер, с заменой текста. Отправку оператор делает вручную. */
+    /* Кнопка «Перевести»: всегда весь композер с заменой текста. Раньше
+       выделение имело приоритет — двойной клик по слову / Shift-выделение
+       перед нажатием переводили и заменяли только кусок, остальное оставалось
+       на исходном языке («переводит половину»). Отправку оператор делает вручную. */
     function doTranslate() {
-      const text = getSelectedText() || getComposerText();
+      const text = getComposerText();
       if (!text) return;
       __waDeckEmit('TRANSLATE', JSON.stringify({
         text: text,
         from: outgoingFrom,
         to: outgoingTo,
-        // Замена всего текста, если ничего не выделено (переводим весь композер)
-        replaceAll: !getSelectedText(),
+        replaceAll: true,
       }));
     }
 
