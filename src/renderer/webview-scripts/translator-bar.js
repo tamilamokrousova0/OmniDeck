@@ -195,17 +195,18 @@ function translatorBarScript(token) {
         'gap:10px',
         'padding:7px 14px',
         'background:' + P.barBg,
-        'border-top:1px solid ' + P.barBorder,
-        'box-shadow:0 -4px 12px rgba(0,0,0,0.08)',
+        'border-bottom:1px solid ' + P.barBorder,
+        'box-shadow:0 4px 12px rgba(0,0,0,0.08)',
         'font-family:Avenir Next,Segoe UI,system-ui,sans-serif',
         'font-size:12.5px',
         'color:' + P.barFg,
-        // Поверх ленты сообщений, прямо над композером: в потоке бар отжимал
-        // всю переписку на 40px вверх при каждом показе/скрытии.
+        /* Накладка под шапкой чата. В потоке бар отжимал всю переписку на 40px
+           при каждом показе; снизу он накрывал последнее сообщение — то, которое
+           как раз читают. Сверху перекрывается верх ленты, где старые. */
         'position:absolute',
         'left:0',
         'right:0',
-        'bottom:0',
+        'top:0',
         'z-index:50',
         'min-height:40px',
         'box-sizing:border-box',
@@ -443,7 +444,7 @@ function translatorBarScript(token) {
       dd.className = '__wadeck-translator-dd';
       dd.style.cssText = [
         'position:absolute',
-        'bottom:calc(100% + 4px)',
+        'top:calc(100% + 4px)',
         'left:0',
         'background:' + P.menuBg,
         'border:1px solid ' + P.barBorder,
@@ -1064,34 +1065,59 @@ function translatorBarScript(token) {
 
     // Бар лежит absolute в родителе футера; bottom = высота футера, чтобы он
     // сидел над композером и поднимался вместе с ним при многострочном вводе.
-    let footerRO = null;
-    let footerObserved = null;
-    function syncBarBottom() {
+    let headerRO = null;
+    let headerObserved = null;
+    function chatHeaderEl() {
+      const host = bar && bar.parentElement;
+      if (!host) return null;
+      // Шапка может лежать и глубже прямого потомка — берём первую видимую.
+      for (const el of host.querySelectorAll('header')) {
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) return el;
+      }
+      return null;
+    }
+
+    /* Бар садится ПОД шапкой чата, не закрывая имя контакта. Смещение считаем
+       по геометрии, а не по offsetHeight: шапка не обязана быть прямым
+       потомком того же контейнера, что и композер, и тогда её высота не равна
+       нужному отступу. Шапка растёт (длинное имя, строка статуса, режим
+       выделения сообщений) — держим наблюдателя вместо разового замера. */
+    function syncBarTop() {
       if (!bar || !bar.isConnected) return;
-      const footer = bar.parentElement && bar.parentElement.querySelector(':scope > footer');
-      if (!footer) return;
-      const h = footer.offsetHeight;
-      if (bar.style.bottom !== h + 'px') bar.style.bottom = h + 'px';
-      if (footerObserved !== footer && typeof ResizeObserver === 'function') {
-        try { if (footerRO) footerRO.disconnect(); } catch {}
-        footerRO = new ResizeObserver(() => syncBarBottom());
-        footerRO.observe(footer);
-        footerObserved = footer;
+      const host = bar.parentElement;
+      const header = chatHeaderEl();
+      let offset = 0;
+      if (header && host) {
+        const hb = header.getBoundingClientRect();
+        const pb = host.getBoundingClientRect();
+        offset = Math.max(0, Math.round(hb.bottom - pb.top));
+      }
+      if (bar.style.top !== offset + 'px') bar.style.top = offset + 'px';
+      if (header && headerObserved !== header && typeof ResizeObserver === 'function') {
+        try { if (headerRO) headerRO.disconnect(); } catch {}
+        headerRO = new ResizeObserver(() => syncBarTop());
+        headerRO.observe(header);
+        headerObserved = header;
       }
     }
 
     function ensureBarInjected() {
-      if (bar && bar.isConnected) { syncBarBottom(); return true; }
+      if (bar && bar.isConnected) { syncBarTop(); return true; }
       const existing = document.getElementById('__wadeck-translator-bar');
       if (existing) existing.remove();
       bar = null;
+      /* Крепимся к тому же контейнеру, что и композер: это #main, в нём же
+         лежит шапка чата. Футер остаётся надёжным якорем — он есть только у
+         открытого чата, в отличие от header, который WhatsApp рисует и в
+         списке чатов. */
       const footer = document.querySelector('footer');
       if (!footer || !footer.parentElement) return false;
       createBar();
       const host = footer.parentElement;
       if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
-      host.insertBefore(bar, footer);
-      syncBarBottom();
+      host.appendChild(bar);
+      syncBarTop();
       return true;
     }
 
