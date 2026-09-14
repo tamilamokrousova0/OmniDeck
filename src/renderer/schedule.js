@@ -1,5 +1,5 @@
 import { WADECK_WV_TOKEN } from './core/state.js';
-import { closeModalAnimated, showToast } from './core/helpers.js';
+import { closeModalAnimated, showToast, setToolbarLabel } from './core/helpers.js';
 import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.js';
 
   let state, els, setStatus, trimMapSize, runWithBusyButton;
@@ -258,7 +258,7 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
     const schedBtn = document.getElementById('open-schedule-toolbar');
     if (schedBtn) {
       schedBtn.classList.toggle('has-pending', items.length > 0);
-      schedBtn.title = items.length > 0 ? `Отложенная отправка (${items.length})` : 'Отложенная отправка';
+      setToolbarLabel(schedBtn, items.length > 0 ? `Отложенная отправка (${items.length})` : 'Отложенная отправка');
     }
 
     /* Update scheduled-list-card summary with count */
@@ -630,6 +630,71 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
    * inbox rows — can jump straight into a chat. Returns { ok } or
    * { ok: false, error }.
    */
+  /* Нормализация имени чата: невидимые LTR/RTL-метки, неразрывные пробелы и
+     кратные пробелы приводятся к одному виду по обе стороны сравнения. */
+  function normalizeChatName(value) {
+    return String(value || '')
+      .replace(/\u200e|\u200f/g, '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
+
+  /* Заголовок реально открытого чата. Единственный надёжный признак того,
+     КОМУ мы сейчас напишем: поиск допускает частичное совпадение («Anna» →
+     «Anna Maria»), а наличие композера доказывает лишь, что чат какой-то
+     открыт, в том числе прежний. */
+  function readOpenChatTitle(query) {
+    return query(`(() => {
+      const normalize = (v) => String(v || '').replace(/\\u200e|\\u200f/g, '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').trim();
+      const pickVisible = (sel) => {
+        for (const el of document.querySelectorAll(sel)) {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && r.height > 0) return el;
+        }
+        return null;
+      };
+      const header =
+        pickVisible('#main header') ||
+        pickVisible('div[data-testid="conversation-header"]') ||
+        pickVisible('main header') ||
+        pickVisible('div[role="main"] header') ||
+        null;
+      if (!header) return { found: false };
+      const strict = header.querySelector('[data-testid="conversation-info-header-chat-title"], [data-testid="conversation-title"], [data-testid="conversation-header-name"]');
+      if (strict) {
+        const t = normalize(strict.getAttribute('title') || strict.textContent || '');
+        if (t) return { found: true, title: t };
+      }
+      // WA рисует имя первой строкой шапки, статус — следующими.
+      const nodes = Array.from(header.querySelectorAll('span[dir="auto"], div[dir="auto"]')).filter((el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      });
+      for (const el of nodes) {
+        const t = normalize(el.getAttribute('title') || el.textContent || '');
+        if (t && t.length < 80 && !/^\\d{1,2}:\\d{2}$/.test(t)) return { found: true, title: t };
+      }
+      return { found: false };
+    })()`);
+  }
+
+  /* Сверка открытого чата с целью. Fail-closed при расхождении имени.
+     Нечитаемая шапка (редизайн WA) не блокирует отправку — иначе один
+     переименованный селектор остановил бы весь планировщик; такой случай
+     помечается unverified. */
+  async function verifyOpenChatTarget(query, chatNameRaw, opts = {}) {
+    const head = await readOpenChatTitle(query);
+    if (!head?.found || !head.title) return { ok: true, unverified: true };
+    const got = normalizeChatName(head.title);
+    const want = normalizeChatName(chatNameRaw);
+    if (got === want) return { ok: true, title: head.title };
+    // Поиск по номеру: в шапке стоит имя контакта, номера в ней нет.
+    if (opts.allowAnyTitle) return { ok: true, title: head.title, unverified: true };
+    return { ok: false, error: 'chat_title_mismatch', title: head.title };
+  }
+
   async function openChatInWebview(webview, chatNameRaw, opts = {}) {
     const chatName = String(chatNameRaw || '').trim();
     if (!chatName) return { ok: false, error: 'no_chat_name' };
@@ -698,7 +763,7 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
     for (let attempt = 0; attempt < 7; attempt++) {
       await delay(100);
       matchResult = await runSearchMatchQuery();
-      if (matchResult?.x) break;
+      if (matchResult?.exact || matchResult?.partial || matchResult?.first) break;
     }
     async function runSearchMatchQuery() {
       return query(`(() => {
@@ -708,6 +773,7 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
       let exact = null;
       let partial = null;
       let first = null;
+      let partialCount = 0;
       for (const item of items) {
         const titleEl = item.querySelector('span[title], div[title], [data-testid="cell-frame-title"]');
         const title = normalize(titleEl?.getAttribute('title') || titleEl?.textContent || '');
@@ -717,24 +783,28 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
         const hit = { x: r.left + r.width/2, y: r.top + r.height/2, title, w: r.width, h: r.height };
         if (!first) first = hit;
         const lower = title.toLowerCase();
-        if (lower === query && !exact) exact = hit;
-        else if (lower.includes(query) && !partial) partial = hit;
-        if (exact) break;
+        if (lower === query) { if (!exact) exact = hit; }
+        else if (lower.includes(query)) { partialCount++; if (!partial) partial = hit; }
       }
-      return exact || partial || { found: false, itemCount: items.length, first };
+      return { exact, partial, partialCount, first, itemCount: items.length };
     })()`);
     }
 
     /* Поиск по номеру телефона: WhatsApp находит сохранённый контакт, но в
      * заголовке результата стоит ИМЯ — номер в нём не встречается, поэтому
      * exact/partial пустые. По просьбе вызывающего кликаем первый результат. */
-    const target = matchResult?.x
-      ? matchResult
-      : (opts.pickFirstResult && matchResult?.first?.x ? matchResult.first : null);
+    const m = matchResult || {};
+    /* Точное совпадение — всегда. Частичное — только если оно единственное:
+       «Anna» при живых «Anna» и «Anna Maria» иначе уходила первому попавшемуся. */
+    const target = m.exact?.x
+      ? m.exact
+      : (m.partial?.x && m.partialCount === 1 ? m.partial
+        : (opts.pickFirstResult && m.first?.x ? m.first : null));
 
     if (!target?.x) {
       await nativeKey('Escape');
-      return { ok: false, error: 'chat_not_found', debug: matchResult };
+      const ambiguous = !m.exact && Number(m.partialCount || 0) > 1;
+      return { ok: false, error: ambiguous ? 'chat_name_ambiguous' : 'chat_not_found', debug: m };
     }
 
     /* STEP 4: Click the search result. 500→250 мс: дальше и так стоит
@@ -761,7 +831,16 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
       return { ok: false, error: 'chat_not_confirmed_after_click', clickTarget: target };
     }
 
-    return { ok: true };
+    /* STEP 6: Сверить шапку. Композер есть и у прежнего чата, поэтому без
+       этой проверки «медленное переключение» выглядит как успешное открытие. */
+    const verified = await verifyOpenChatTarget(query, chatName, {
+      allowAnyTitle: Boolean(opts.pickFirstResult) || target === m.first,
+    });
+    if (!verified.ok) {
+      return { ok: false, error: verified.error, openedTitle: verified.title, wanted: chatName };
+    }
+
+    return { ok: true, unverified: verified.unverified === true, openedTitle: verified.title };
   }
 
   /**
@@ -829,7 +908,22 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
       return { ok: false, error: 'chat_not_confirmed_after_click', clickTarget: matchResult };
     }
 
-    return { ok: true };
+    const verified = await verifyOpenChatTarget(query, chatName);
+    if (!verified.ok) {
+      return { ok: false, error: verified.error, openedTitle: verified.title, wanted: chatName };
+    }
+
+    return { ok: true, unverified: verified.unverified === true, openedTitle: verified.title };
+  }
+
+  /* Отмена после claim: исполнитель работает с КОПИЕЙ задания, поэтому статус
+     перечитывается из main непосредственно перед необратимым действием.
+     Недоступный main не блокирует отправку — иначе сбой IPC тихо остановил бы
+     всё расписание. */
+  async function isStillActive(item) {
+    const st = await window.waDeck.scheduledStatus?.(item.id).catch(() => null);
+    if (!st || !st.ok) return true;
+    return st.status !== 'canceled';
   }
 
   async function runScheduledSend(webview, item) {
@@ -883,6 +977,9 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
         const group = groups[gi];
         const isLast = gi === groups.length - 1;
         const captionForThisGroup = isLast ? text : '';
+        if (!(await isStillActive(item))) {
+          return { ok: false, canceled: true, error: 'canceled_before_send', sentGroups: gi };
+        }
         const groupResult = await sendAttachmentGroup({
           webview,
           webContentsId,
@@ -896,7 +993,9 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
           delay,
         });
         if (!groupResult.ok) {
-          return { ok: false, error: `attach_${group.kind}_${groupResult.error}`, debug: groupResult };
+          // Уже отправленные группы называем явно: повтор задания продублирует их.
+          const partial = gi > 0 ? ` (уже отправлено групп: ${gi})` : '';
+          return { ok: false, error: `attach_${group.kind}_${groupResult.error}${partial}`, sentGroups: gi, debug: groupResult };
         }
         // Small settle between groups so the UI recovers before next attach
         if (!isLast) await delay(700);
@@ -923,6 +1022,30 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
 
     if (!composerRect?.found) return { ok: false, error: 'composer_rect_not_found' };
 
+    /* Чужой черновик или режим ответа: nativeType дописывает текст в конец,
+       и получатель получает «черновик + запланированное». Не трогаем чужой
+       текст, останавливаем задание. */
+    const composerState = await query(`(() => {
+      const c = document.querySelector('footer div[contenteditable="true"][role="textbox"]') ||
+                document.querySelector('footer div[contenteditable="true"]');
+      const draft = (c?.innerText || c?.textContent || '').replace(/\\s+/g, ' ').trim();
+      const footer = document.querySelector('footer');
+      const quoted = Boolean(
+        footer && (
+          footer.querySelector('[data-testid="quoted-message"]') ||
+          footer.querySelector('[aria-label*="Отмен" i][data-icon]') ||
+          footer.querySelector('[data-icon="x-alt"], [data-icon="x-viewer"]')
+        )
+      );
+      return { draft, quoted };
+    })()`);
+    if (composerState?.draft) {
+      return { ok: false, error: 'composer_has_draft', debug: { draft: composerState.draft.slice(0, 60) } };
+    }
+    if (composerState?.quoted) {
+      return { ok: false, error: 'composer_in_reply_mode' };
+    }
+
     await nativeClick(composerRect.x, composerRect.y);
     await delay(150);
 
@@ -940,6 +1063,12 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
       return { has: t.indexOf(${JSON.stringify(wantPrefix)}) !== -1 };
     })()`);
     if (!typedProbe?.has) return { ok: false, error: 'text_not_typed' };
+
+    if (!(await isStillActive(item))) {
+      // Набранный текст оставляем как черновик: чистка композера — тоже запись
+      // в чужой чат, а отменённое задание не должно ничего менять необратимо.
+      return { ok: false, canceled: true, error: 'canceled_before_send' };
+    }
 
     await nativeKey('Enter');
     await delay(500);
@@ -1166,13 +1295,35 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
         return { found: false };
       })()`);
 
-      if (captionRect?.found) {
-        await nativeClick(captionRect.x, captionRect.y);
-        await delay(150);
-        await nativeType(caption);
-        await delay(250);
+      if (!captionRect?.found) {
+        // Подпись задана пользователем — молча отправить вложение без неё
+        // значит доставить не то сообщение и отчитаться об успехе.
+        await nativeKey('Escape');
+        return { ok: false, error: 'caption_input_not_found' };
       }
-      // If caption input isn't found we still send — WhatsApp allows captionless attachments.
+      await nativeClick(captionRect.x, captionRect.y);
+      await delay(150);
+      await nativeType(caption);
+      await delay(250);
+
+      const wantCaption = String(caption).replace(/\s+/g, ' ').trim().slice(0, 40);
+      const captionProbe = await query(`(() => {
+        const nodes = Array.from(document.querySelectorAll('div[contenteditable="true"], [contenteditable="true"][role="textbox"]'));
+        for (let i = nodes.length - 1; i >= 0; i--) {
+          const el = nodes[i];
+          if (el.closest('footer')) continue;
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && r.height > 0) {
+            const t = (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim();
+            return { has: t.indexOf(${JSON.stringify(wantCaption)}) !== -1 };
+          }
+        }
+        return { has: false };
+      })()`);
+      if (!captionProbe?.has) {
+        await nativeKey('Escape');
+        return { ok: false, error: 'caption_not_typed' };
+      }
     }
 
     /* F. Click the preview's Send button. Same "outside footer" rule. */
@@ -1254,6 +1405,12 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
         const result = await runScheduledSend(webview, item);
         console.log('[scheduled] result:', item.chatName, JSON.stringify(result));
 
+        if (result?.canceled) {
+          // Статусом уже владеет cancelScheduled — не перетираем его на failed.
+          setStatus(`Отменено до отправки: ${item.chatName}`);
+          continue;
+        }
+
         await reportScheduledResult(item, Boolean(result?.ok), result?.ok ? '' : String(result?.error || 'send_failed'));
       }
 
@@ -1299,7 +1456,18 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
       }
     }
 
-    setStatus(`Ошибка отправки: ${item.chatName} (${errorText || 'send_failed'})`);
+    const HUMAN_ERRORS = {
+      chat_title_mismatch: 'открылся другой чат — отправка остановлена',
+      chat_name_ambiguous: 'несколько чатов с похожим именем — уточните название',
+      composer_has_draft: 'в поле ввода есть черновик — отправка остановлена',
+      composer_in_reply_mode: 'открыт режим ответа — отправка остановлена',
+      caption_input_not_found: 'не найдено поле подписи к вложению',
+      caption_not_typed: 'подпись не набралась — вложение не отправлено',
+    };
+    const human = HUMAN_ERRORS[errorText];
+    setStatus(human
+      ? `Не отправлено: ${item.chatName} — ${human}`
+      : `Ошибка отправки: ${item.chatName} (${errorText || 'send_failed'})`);
   }
 
   function startScheduleRunner() {

@@ -12,6 +12,17 @@
 function voiceTranscribeButtonsScript(token) {
   const tokenJs = JSON.stringify(typeof token === 'string' ? token : '');
   return `(() => {
+    function waIsDark() {
+      try {
+        const probe = document.querySelector('#app') || document.body;
+        const bg = getComputedStyle(probe).backgroundColor || '';
+        const m = bg.match(/rgba?\\(([^)]+)\\)/);
+        if (!m) return false;
+        const [r, g, b] = m[1].split(',').map((v) => parseFloat(v));
+        return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.5;
+      } catch { return false; }
+    }
+
     if (window.__waDeckVoiceBtnBound) return true;
     window.__waDeckVoiceBtnBound = true;
 
@@ -61,9 +72,11 @@ function voiceTranscribeButtonsScript(token) {
         'font-size:11px',
         'line-height:1.5',
         'border-radius:10px',
-        'background:rgba(24,30,43,0.85)',
-        'border:1px solid rgba(45,140,240,0.4)',
-        'color:#9fb6c9',
+        /* Та же логика темы, что у переводчика: тёмная пилюля на светлом WA
+           выпадала из интерфейса. */
+        'background:' + (waIsDark() ? 'rgba(31,44,51,0.9)' : 'rgba(255,255,255,0.95)'),
+        'border:1px solid ' + (waIsDark() ? '#2a3942' : '#d8e4c6'),
+        'color:' + (waIsDark() ? '#8696a0' : '#667781'),
         'cursor:pointer',
         'user-select:none',
         '-webkit-user-select:none',

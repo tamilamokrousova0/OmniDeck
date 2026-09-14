@@ -10,8 +10,11 @@
     <true/>
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <true/>
-    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
-    <true/>
+    <!-- allow-dyld-environment-variables убрано: в коде нет ни одного DYLD_*,
+         а право открывает подмену библиотек через переменные окружения.
+         disable-library-validation оставлено: дека запускает скачанные в
+         рантайме java/whisper/llama, и без него подписанная сборка может
+         отказаться их принимать. -->
     <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
     <key>com.apple.security.device.audio-input</key>

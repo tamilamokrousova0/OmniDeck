@@ -108,12 +108,6 @@
               </svg>
               <span class="btn-toolbar-label">Голосовое</span>
             </button>
-            <button type="button" id="call-brief-btn" class="btn btn-icon btn-toolbar-icon btn-toolbar-expand" title="Бриф по чату перед звонком (локальная модель)">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L8.1 9.6a16 16 0 0 0 6 6l1.2-1.1a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2Z"/>
-              </svg>
-              <span class="btn-toolbar-label">Бриф</span>
-            </button>
             <button type="button" id="toggle-split" class="btn btn-icon btn-toolbar-icon btn-toolbar-expand" title="Браузер в боковой панели">
               <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <rect x="3" y="4" width="18" height="16" rx="2"/>
@@ -127,7 +121,6 @@
             <div id="weather-toggle" class="weather-toggle weather-display" title="Погода">
               <span id="weather-icon" class="weather-icon">🌙</span>
               <span id="weather-temp" class="weather-temp">--°C</span>
-              <span id="weather-city" class="weather-city">Москва</span>
             </div>
           </div>
           <div id="toolbar-clock" class="toolbar-clock" title="Местное время">
@@ -289,7 +282,6 @@
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
               </span>
             </button>
-
             <button type="button" class="settings-menu-item" data-open="schedule">
               <span class="settings-menu-ico">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -305,7 +297,6 @@
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
               </span>
             </button>
-
             <button type="button" class="settings-menu-item" data-open="clocks">
               <span class="settings-menu-ico">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -438,43 +429,17 @@
         <details class="card card-collapsible" id="templates-settings-card" open>
           <summary>Общие шаблоны</summary>
           <div class="tmpl-lib">
-            <div class="tmpl-lib-head">
-              <span class="tmpl-lib-count" id="tmpl-lib-count">0 шаблонов</span>
-              <button type="button" id="tmpl-lib-new" class="tmpl-lib-action">+ Новый шаблон</button>
-            </div>
+            <div class="tmpl-lib-head"><span class="tmpl-lib-count" id="tmpl-lib-count">0 шаблонов</span><button type="button" id="tmpl-lib-new" class="tmpl-lib-action">+ Новый шаблон</button></div>
             <div id="tmpl-lib-list" class="tmpl-lib-list"></div>
-            <div class="tmpl-vars-hint">Переменные: {имя} · {приветствие} · {дата} · {время} — подставляются при вставке и отправке</div>
+            <div class="tmpl-vars-hint">Переменные: {имя} · {приветствие} · {дата} · {время}</div>
           </div>
           <div id="tmpl-edit-wrap" class="tmpl-edit-wrap hidden">
-            <div class="tmpl-edit-head">
-              <span class="tmpl-edit-title" id="tmpl-edit-title">Новый шаблон</span>
-              <button type="button" id="tmpl-edit-close" class="tmpl-edit-close" title="Закрыть (Esc)" aria-label="Закрыть">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-              </button>
-            </div>
-            <!-- Hidden template selector preserved for internal state only — user picks from list above. -->
-            <select id="template-select" hidden>
-              <option value="">Новый шаблон</option>
-            </select>
-            <label>
-              Название
-              <input id="template-title" type="text" placeholder="Например: Приветствие" maxlength="120" />
-            </label>
-            <label>
-              Категория
-              <input id="template-category" type="text" placeholder="Например: Приветствия" maxlength="60" autocomplete="off" />
-              <div id="template-category-chips" class="tmpl-category-chips" aria-label="Существующие категории"></div>
-            </label>
-            <label>
-              Текст
-              <textarea id="template-text" rows="4" placeholder="Текст шаблона, доступный для всех WhatsApp и чатов"></textarea>
-            </label>
-            <div class="row template-main-actions">
-              <button type="button" id="template-save" class="btn btn-primary">Сохранить</button>
-              <button type="button" id="template-to-chat" class="btn">Вставить в чат</button>
-              <button type="button" id="template-delete" class="btn btn-ghost-danger" title="Удалить шаблон">Удалить</button>
-            </div>
-            <!-- Hidden "new template" trigger — clicked programmatically by the library header button -->
+            <div class="tmpl-edit-head"><span class="tmpl-edit-title" id="tmpl-edit-title">Новый шаблон</span><button type="button" id="tmpl-edit-close" class="tmpl-edit-close" title="Закрыть" aria-label="Закрыть">×</button></div>
+            <select id="template-select" hidden><option value="">Новый шаблон</option></select>
+            <label>Название<input id="template-title" type="text" placeholder="Например: Приветствие" maxlength="120" /></label>
+            <label>Категория<input id="template-category" type="text" placeholder="Например: Приветствия" maxlength="60" autocomplete="off" /><div id="template-category-chips" class="tmpl-category-chips" aria-label="Существующие категории"></div></label>
+            <label>Текст<textarea id="template-text" rows="4" placeholder="Текст шаблона"></textarea></label>
+            <div class="row template-main-actions"><button type="button" id="template-save" class="btn btn-primary">Сохранить</button><button type="button" id="template-to-chat" class="btn">Вставить в чат</button><button type="button" id="template-delete" class="btn btn-ghost-danger">Удалить</button></div>
             <button type="button" id="template-new" hidden></button>
           </div>
         </details>
@@ -483,63 +448,17 @@
         <section class="settings-section" data-settings-section="schedule">
         <details class="card card-collapsible" id="schedule-settings-card" open>
           <summary>Создать отложенное сообщение</summary>
-          <div id="schedule-edit-banner" class="schedule-edit-banner hidden">
-            <span class="schedule-edit-banner-text">Редактирование задания</span>
-            <button type="button" id="schedule-edit-cancel" class="schedule-edit-banner-close modal-close-x" title="Отменить редактирование" aria-label="Отменить редактирование">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
-          </div>
-          <label>
-            Цель отправки
-            <input id="schedule-target" type="text" placeholder="Выберите WhatsApp и чат" readonly />
-          </label>
+          <div id="schedule-edit-banner" class="schedule-edit-banner hidden"><span class="schedule-edit-banner-text">Редактирование задания</span><button type="button" id="schedule-edit-cancel" class="schedule-edit-banner-close" title="Отменить" aria-label="Отменить">×</button></div>
+          <label>Цель отправки<input id="schedule-target" type="text" placeholder="Выберите WhatsApp и чат" readonly /></label>
           <button type="button" id="open-chat-picker" class="btn">Выбрать WhatsApp и чат</button>
-          <label>
-            Сообщение
-            <textarea id="schedule-text" rows="4" placeholder="Текст сообщения"></textarea>
-          </label>
-          <label>
-            Время отправки
-            <input id="schedule-at" type="datetime-local" step="1" />
-          </label>
-          <div id="schedule-quick-row" class="schedule-quick-row">
-            <button type="button" class="btn btn-quick-min" data-quick-min="5">+5 мин</button>
-            <button type="button" class="btn btn-quick-min" data-quick-min="10">+10 мин</button>
-            <button type="button" class="btn btn-quick-min" data-quick-min="15">+15 мин</button>
-            <button type="button" class="btn btn-quick-min" data-quick-min="20">+20 мин</button>
-          </div>
-          <div class="row">
-            <label class="schedule-repeat-label">
-              Повтор
-              <select id="schedule-repeat" class="settings-select">
-                <option value="">Без повтора</option>
-                <option value="daily">Каждый день</option>
-                <option value="weekdays">По будням</option>
-                <option value="weekly">Раз в неделю</option>
-              </select>
-            </label>
-            <label class="schedule-repeat-label">
-              Джиттер
-              <select id="schedule-jitter" class="settings-select">
-                <option value="0">Точно в срок</option>
-                <option value="5">±5 мин</option>
-                <option value="15">±15 мин</option>
-                <option value="30">±30 мин</option>
-              </select>
-            </label>
-          </div>
-          <div class="row">
-            <button type="button" id="pick-attachments" class="btn">Добавить вложения</button>
-            <button type="button" id="clear-attachments" class="btn">Очистить вложения</button>
-          </div>
-          <div id="attachments-list" class="attachments-list"></div>
-          <button type="button" id="create-schedule" class="btn btn-primary full">Запланировать</button>
+          <label>Сообщение<textarea id="schedule-text" rows="4" placeholder="Текст сообщения"></textarea></label>
+          <label>Время отправки<input id="schedule-at" type="datetime-local" step="1" /></label>
+          <div id="schedule-quick-row" class="schedule-quick-row"><button type="button" class="btn btn-quick-min" data-quick-min="5">+5 мин</button><button type="button" class="btn btn-quick-min" data-quick-min="10">+10 мин</button><button type="button" class="btn btn-quick-min" data-quick-min="15">+15 мин</button><button type="button" class="btn btn-quick-min" data-quick-min="20">+20 мин</button></div>
+          <div class="row"><label class="schedule-repeat-label">Повтор<select id="schedule-repeat" class="settings-select"><option value="">Без повтора</option><option value="daily">Каждый день</option><option value="weekdays">По будням</option><option value="weekly">Раз в неделю</option></select></label><label class="schedule-repeat-label">Джиттер<select id="schedule-jitter" class="settings-select"><option value="0">Точно в срок</option><option value="5">±5 мин</option><option value="15">±15 мин</option><option value="30">±30 мин</option></select></label></div>
+          <div class="row"><button type="button" id="pick-attachments" class="btn">Добавить вложения</button><button type="button" id="clear-attachments" class="btn">Очистить вложения</button></div>
+          <div id="attachments-list" class="attachments-list"></div><button type="button" id="create-schedule" class="btn btn-primary full">Запланировать</button>
         </details>
-
-        <details class="card card-collapsible" id="scheduled-list-card" open>
-          <summary>Запланированные сообщения</summary>
-          <div id="scheduled-list" class="scheduled-list"></div>
-        </details>
+        <details class="card card-collapsible" id="scheduled-list-card" open><summary>Запланированные сообщения</summary><div id="scheduled-list" class="scheduled-list"></div></details>
         </section>
 
         <section class="settings-section" data-settings-section="clocks">
@@ -548,26 +467,11 @@
           <div id="clocks-settings-list" class="clocks-settings-list"></div>
           <div id="clocks-add-form" class="clocks-add-form hidden">
             <input id="clock-new-label" type="text" placeholder="Город" maxlength="30" />
+            <!-- Список заполняется из getTimezoneOptions(): смещения считаются
+                 на текущую дату, статические подписи врали при переходе на
+                 летнее время и после реформ часовых поясов. -->
             <select id="clock-new-tz" class="settings-select">
               <option value="">Пояс</option>
-              <option value="Pacific/Auckland">Окленд +12</option>
-              <option value="Asia/Tokyo">Токио +9</option>
-              <option value="Asia/Shanghai">Шанхай +8</option>
-              <option value="Asia/Bangkok">Бангкок +7</option>
-              <option value="Asia/Almaty">Алматы +6</option>
-              <option value="Asia/Tashkent">Ташкент +5</option>
-              <option value="Asia/Dubai">Дубай +4</option>
-              <option value="Europe/Moscow">Москва +3</option>
-              <option value="Europe/Kiev">Киев +2/+3</option>
-              <option value="Europe/Berlin">Берлин +1/+2</option>
-              <option value="Europe/London">Лондон +0/+1</option>
-              <option value="Atlantic/Azores">Азоры −1</option>
-              <option value="America/Sao_Paulo">Сан-Паулу −3</option>
-              <option value="America/New_York">Нью-Йорк −5</option>
-              <option value="America/Chicago">Чикаго −6</option>
-              <option value="America/Denver">Денвер −7</option>
-              <option value="America/Los_Angeles">Лос-Анж. −8</option>
-              <option value="Pacific/Honolulu">Гонолулу −10</option>
             </select>
             <button type="button" id="clock-add" class="btn btn-small">✓</button>
           </div>
@@ -735,18 +639,6 @@
       </div>
     </div>
 
-
-    <div id="call-brief-modal" class="modal hidden">
-      <div class="modal-card">
-        <div class="modal-head">
-          <h3 id="call-brief-head">Бриф</h3>
-          <button type="button" id="call-brief-close" class="btn btn-icon modal-close-btn modal-close-x" title="Закрыть" aria-label="Закрыть">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-        <pre id="call-brief-text" class="call-brief-text"></pre>
-      </div>
-    </div>
 
     <div id="crm-modal" class="modal hidden">
       <div class="modal-card modal-card-crm">

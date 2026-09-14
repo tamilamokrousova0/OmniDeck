@@ -174,37 +174,6 @@ function updateHubClocks() {
   }
 }
 
-/* Motivational phrases shown in the hub title between 23:00 and 09:00 local
-   time — a tiny reward for early-birds / night-owls working out of hours.
-   Regular 09:00-23:00 keeps the plain "WA Deck" brand. */
-const HUB_MOTIVATION_PHRASES = [
-  'Пока другие спят — ты зарабатываешь',
-  'Миллион сам себя не сделает',
-  'Каждое сообщение — шаг к богатству',
-  'Работай, пока остальные в кровати',
-  'Деньги приходят к тем, кто не спит',
-  'Сегодня трудись — завтра отдыхай',
-  'Мечты не работают, пока не работаешь ты',
-  'Время — деньги, не теряй ни минуты',
-  'Твой успех в твоих руках',
-  'Не жди удачи — создавай её',
-  'Богатые встают рано',
-  'Лень сегодня — пустой счёт завтра',
-  'Сильные работают, слабые спят',
-  'Ещё один чат — ещё один рубль в копилке',
-  'Сон переоценён, деньги — нет',
-  'Ты сам проектируешь свой завтрашний доход',
-  'Делай больше, чем от тебя ждут',
-  'Солнце ещё не встало — а ты уже в деле',
-  'Пока город просыпается — твой доход уже растёт',
-  'Пока слабые видят сны — сильные шлют счета',
-  'Кофе сварен — пора зарабатывать',
-  'Усталость — цена, деньги — награда',
-];
-
-// Hour-bucket cache for the motivational hub title (see updateHubGreeting).
-let _hubMotivationCache = { bucket: '', phrase: '' };
-
 function updateHubGreeting() {
   const el = document.getElementById('hub-greeting');
   if (!el) return;
@@ -229,26 +198,10 @@ function updateHubGreeting() {
   dateSpan.textContent = '· ' + dateStr;
   el.append(iconSpan, textSpan, dateSpan);
 
-  // Motivational hub-title swap — active 23:00–08:59, plain "OmniDeck" otherwise.
-  // The phrase is cached per hour bucket: updateHubDashboard() runs every few
-  // seconds, and re-rolling the phrase each time made the title flicker.
   const titleEl = document.getElementById('hub-title');
   if (titleEl) {
-    const offHours = h < 9 || h >= 23;
-    if (offHours) {
-      const bucket = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${h}`;
-      if (_hubMotivationCache.bucket !== bucket || !_hubMotivationCache.phrase) {
-        _hubMotivationCache = {
-          bucket,
-          phrase: HUB_MOTIVATION_PHRASES[Math.floor(Math.random() * HUB_MOTIVATION_PHRASES.length)],
-        };
-      }
-      titleEl.textContent = LITE ? `${_hubMotivationCache.phrase} · Lite` : _hubMotivationCache.phrase;
-      titleEl.classList.add('hub-title--motivation');
-    } else {
-      titleEl.textContent = LITE ? 'OmniDeck Lite' : 'OmniDeck';
-      titleEl.classList.remove('hub-title--motivation');
-    }
+    titleEl.textContent = LITE ? 'OmniDeck Lite' : 'OmniDeck';
+    titleEl.classList.remove('hub-title--motivation');
   }
 }
 
@@ -288,13 +241,6 @@ async function updateHubDashboard() {
   updateHubClocks();
   updateHubGreeting();
 
-  // pending scheduled count (kept in state for the toolbar indicator)
-  try {
-    const res = await window.waDeck.listScheduled({ limit: 50 });
-    const pending = Array.isArray(res?.items) ? res.items.filter((i) => i.status === 'pending') : [];
-    state.hubPendingCount = pending.length;
-  } catch { /* ignore */ }
-
   updateHubFilters();
 
   const countEl = document.getElementById('hub-accts-count');
@@ -321,6 +267,9 @@ async function updateHubDashboard() {
     const card = document.createElement('div');
     card.className = 'hub-acct-card' + (isPinned ? ' hub-acct-card--pinned' : '');
     card.style.setProperty('--card-c', account.color || 'var(--accent-blue)');
+    // Заморозка — на самой карточке: в лайте строка компактная и показывает
+    // её снежинкой у имени, без тега в третьем ряду.
+    if (account.frozen) card.classList.add('is-frozen');
     card.addEventListener('click', () => setActiveAccount(account.id));
 
     const bar = document.createElement('span');
@@ -332,6 +281,11 @@ async function updateHubDashboard() {
     avWrap.style.setProperty('--tile', account.color || '#8a93a6');
     const labelText = (account.name || '').split(' ')[0].slice(0, 2).toUpperCase() || (account.type === 'telegram' ? 'TG' : (account.type === 'signal' ? 'SG' : 'WA'));
     avWrap.textContent = labelText;
+    /* В лайте плитка несёт глиф бренда вместо инициалов: на 24px две буквы
+       нечитаемы, а тип иначе виден только тегом, который мы убрали. */
+    if (LITE) {
+      avWrap.innerHTML = brandIconSvg(account.type === 'telegram' ? 'telegram' : 'whatsapp', { size: 13, color: '#fff' });
+    }
     if (account.frozen) {
       const status = document.createElement('span');
       status.className = 'hub-acct-status frozen';

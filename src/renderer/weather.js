@@ -51,10 +51,10 @@
   function renderWeatherSummary({ city, icon, temperature, unit, loading }) {
     // Toolbar widget is the only mandatory target now — city/icon/temp.
     // weatherUnit toggle + popover were removed; update them defensively.
-    if (!els.weatherCity || !els.weatherIcon || !els.weatherTemp) return;
+    if (!els.weatherIcon || !els.weatherTemp) return;
     const safeCity = normalizeWeatherCity(city || state.settings?.weatherCity);
     const safeUnit = normalizeWeatherUnit(unit || state.settings?.weatherUnit);
-    els.weatherCity.textContent = safeCity;
+    if (els.weatherCity) els.weatherCity.textContent = safeCity;
     els.weatherIcon.textContent = icon || '🌙';
     els.weatherTemp.textContent = Number.isFinite(temperature) ? `${Math.round(temperature)}${weatherUnitSuffix(safeUnit)}` : `--${weatherUnitSuffix(safeUnit)}`;
     els.weatherToggle?.classList.toggle('is-loading', Boolean(loading));
@@ -141,12 +141,18 @@
         unit,
         loading: false,
       });
-      const hhmm = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     } catch (error) {
       if (gen !== _weatherGen) return; // a newer refresh owns the UI now
       renderWeatherSummary({ city, unit, loading: false });
-      if (String(error?.message || '').includes('city_not_found')) {
+      /* Обе ветки были пустыми: неизвестный город и обрыв сети выглядели
+         одинаково — «загрузка кончилась, ничего не изменилось». */
+      const msg = String(error?.message || '');
+      if (msg.includes('city_not_found')) {
+        setStatus?.(`Погода: город «${city}» не найден`);
+      } else if (/timeout|abort/i.test(msg)) {
+        setStatus?.('Погода: сервис не ответил, попробуйте позже');
       } else {
+        setStatus?.('Погода: не удалось обновить (нет сети или сервис недоступен)');
       }
     }
   }

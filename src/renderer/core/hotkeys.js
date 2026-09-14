@@ -47,6 +47,13 @@ function handleEscapeUiReset() {
     window.WaDeckSplitModule.toggle();
     return true;
   }
+  // 0.7 Поповер «+» (выбор мессенджера) — самый мелкий слой, закрывается первым
+  const addPopover = document.getElementById('add-account-popover');
+  if (isOpen(addPopover)) {
+    addPopover.classList.add('hidden');
+    document.getElementById('add-account')?.focus?.();
+    return true;
+  }
   // 1. Floating Tweaks popover — the most shallow UI
   const tweaksPanel = document.getElementById('tweaks-panel');
   if (isOpen(tweaksPanel)) {
@@ -78,15 +85,10 @@ function handleEscapeUiReset() {
     WaDeckAutoUpdateModule.closeReleaseNotesModal().catch(console.error);
     return true;
   }
-  // 7. Inline template edit form (lives inside the settings panel)
+  // 7. Форма правки шаблона в настройках
   const tmplEditWrap = document.getElementById('tmpl-edit-wrap');
   if (!state.panelHidden && isOpen(tmplEditWrap)) {
     if (typeof window._hideTemplateEditForm === 'function') window._hideTemplateEditForm();
-    return true;
-  }
-  // 7.5 Бриф звонка
-  if (isOpen(els.callBriefModal)) {
-    window.WaDeckCallBriefModule?.closeCallBrief();
     return true;
   }
   // 8. CRM modal

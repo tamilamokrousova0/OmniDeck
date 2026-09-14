@@ -26,6 +26,7 @@ const path = require('path');
 const MODEL_FILE = 'ggml-small-q5_1.bin';
 const MODEL_URL = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${MODEL_FILE}`;
 const MODEL_MIN_BYTES = 150 * 1024 * 1024; // недокачанный файл не считаем моделью
+const MODEL_IDLE_TIMEOUT_MS = 90000; // простой канала при скачивании модели
 const MODEL_HUMAN_SIZE = '~190 МБ';
 const CAPTURE_TIMEOUT_MS = 25000;  // скачивание+расшифровка медиа самим WhatsApp
 const WHISPER_TIMEOUT_MS = 300000; // слабый CPU + длинное голосовое — это долго
@@ -570,8 +571,20 @@ async function downloadModel(contents, voiceId, onProgress) {
     const dest = modelPath();
     const tmp = `${dest}.download`;
     await fs.mkdir(path.dirname(dest), { recursive: true });
-    const resp = await net.fetch(MODEL_URL);
-    if (!resp.ok) throw new Error(`model download HTTP ${resp.status}`);
+    /* Без таймаута зависший CDN оставлял _busy=true навсегда: все расшифровки
+       отвечали «уже идёт другая» до перезапуска деки. Сторож срабатывает по
+       ПРОСТОЮ, а не по общему времени — медленный, но живой канал не рвём. */
+    const ac = new AbortController();
+    let idleTimer = setTimeout(() => ac.abort(), MODEL_IDLE_TIMEOUT_MS);
+    const armIdle = () => {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => ac.abort(), MODEL_IDLE_TIMEOUT_MS);
+    };
+    const resp = await net.fetch(MODEL_URL, { signal: ac.signal }).catch((err) => {
+      clearTimeout(idleTimer);
+      throw new Error(ac.signal.aborted ? 'model_download_stalled' : String(err?.message || err));
+    });
+    if (!resp.ok) { clearTimeout(idleTimer); throw new Error(`model download HTTP ${resp.status}`); }
     const total = Number(resp.headers.get('content-length')) || 0;
     const fh = await fs.open(tmp, 'w');
     let received = 0;
@@ -583,6 +596,7 @@ async function downloadModel(contents, voiceId, onProgress) {
         if (done) break;
         await fh.write(value);
         received += value.length;
+        armIdle();
         const pct = total ? Math.floor((received / total) * 100) : 0;
         if (pct >= lastShown + 5) {
           lastShown = pct;
@@ -591,9 +605,13 @@ async function downloadModel(contents, voiceId, onProgress) {
         }
       }
     } finally {
+      clearTimeout(idleTimer);
       await fh.close();
     }
-    if (received < MODEL_MIN_BYTES) throw new Error('model download truncated');
+    if (received < MODEL_MIN_BYTES) {
+      await fs.unlink(tmp).catch(() => {});
+      throw new Error('model download truncated');
+    }
     await fs.rename(tmp, dest);
   })().finally(() => { _modelDownloadPromise = null; });
   return _modelDownloadPromise;

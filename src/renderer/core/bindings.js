@@ -1,6 +1,6 @@
 /* bindActions(): all DOM event wiring for toolbar, settings, modals,
    hotkeys, zoom, sidebar resize. Extracted verbatim from renderer.js. */
-import { state, els } from './state.js';
+import { state, els, LITE } from './state.js';
 import {
   setStatus,
   showToast,
@@ -61,7 +61,6 @@ import { templateController } from './init.js';
 import { WaDeckWeatherModule } from '../weather.js';
 import { WaDeckAutoUpdateModule } from '../auto-update.js';
 import { WaDeckCrmModule } from '../crm.js';
-import { WaDeckCallBriefModule } from '../call-brief.js';
 import { WaDeckScheduleModule } from '../schedule.js';
 
 function bindActions() {
@@ -428,8 +427,6 @@ function bindActions() {
   els.crmSave?.addEventListener('click', () => WaDeckCrmModule.saveCrmCard().catch(console.error));
   els.crmCopy?.addEventListener('click', () => WaDeckCrmModule.copyCrmCard().catch(console.error));
   els.crmClose?.addEventListener('click', WaDeckCrmModule.closeCrmModal);
-  els.callBriefBtn?.addEventListener('click', () => WaDeckCallBriefModule.openCallBrief().catch(console.error));
-  els.callBriefClose?.addEventListener('click', WaDeckCallBriefModule.closeCallBrief);
   if (els.crmAddNote) els.crmAddNote.addEventListener('click', WaDeckCrmModule.addCrmNote);
   WaDeckCrmModule.bindCrmAutoResize();
   // Confirm модал
@@ -452,8 +449,7 @@ function bindActions() {
     els.scheduleAt.value = nextSendAtLocal(minutes);
   });
 
-  /* ── Schedule: toolbar "Отложенные" opens the settings → Schedule drawer,
-     consistent with Templates. The old floating popover was removed. ── */
+  /* ── Toolbar «Отложенные» открывает раздел настроек. */
   function openScheduleSection() {
     if (state.panelHidden) openSettingsPanel();
     showSettingsSection('schedule');
@@ -481,7 +477,7 @@ function bindActions() {
       }
     });
   }
-  // Also refresh when user navigates via Settings → Отложенные сообщения
+  // Обновляем черновик при входе в раздел из меню настроек.
   document.querySelectorAll('.settings-menu-item[data-open="schedule"]').forEach((btn) => {
     btn.addEventListener('click', () => {
       // showSettingsSection already fired by the generic handler — just refresh time.
@@ -591,13 +587,17 @@ function bindActions() {
 
   // ── Sidebar Resize Handle ──
   if (els.sidebarResizeHandle) {
-    const SIDEBAR_MIN = 64;
-    const SIDEBAR_MAX = 200;
+    /* Лайт рисует сайдбар списком с именами — ему нужна большая минимальная
+       ширина и СВОЙ ключ: userData общий с обычной декой, и одно значение на
+       двоих оставило бы плиточную деку растянутой на 158px (и наоборот). */
+    const SIDEBAR_MIN = LITE ? 120 : 64;
+    const SIDEBAR_MAX = LITE ? 240 : 200;
+    const SIDEBAR_KEY = LITE ? 'sidebarWidthLite' : 'sidebarWidth';
     const appRoot = document.getElementById('app-root');
     let resizing = false;
 
     // Restore saved width (with NaN protection — corrupted value breaks CSS grid)
-    const savedWidth = localStorage.getItem('sidebarWidth');
+    const savedWidth = localStorage.getItem(SIDEBAR_KEY);
     if (savedWidth) {
       const parsed = Number(savedWidth);
       if (Number.isFinite(parsed)) {
@@ -605,7 +605,7 @@ function bindActions() {
         appRoot.style.setProperty('--sidebar-width', w + 'px');
         els.sidebarResizeHandle.style.left = w + 'px';
       } else {
-        localStorage.removeItem('sidebarWidth');
+        localStorage.removeItem(SIDEBAR_KEY);
       }
     }
 
@@ -632,7 +632,7 @@ function bindActions() {
       document.body.style.userSelect = '';
       const currentWidth = parseInt(getComputedStyle(appRoot).getPropertyValue('--sidebar-width'), 10);
       if (Number.isFinite(currentWidth) && currentWidth >= SIDEBAR_MIN && currentWidth <= SIDEBAR_MAX) {
-        localStorage.setItem('sidebarWidth', currentWidth);
+        localStorage.setItem(SIDEBAR_KEY, currentWidth);
       }
     });
   }

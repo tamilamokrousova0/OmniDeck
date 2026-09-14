@@ -11,6 +11,7 @@ import {
   formatDateTime,
   nextSendAtLocal,
   applyTemplateVariables,
+  setToolbarLabel,
 } from './helpers.js';
 import {
   renderAccounts,
@@ -44,7 +45,6 @@ import { WaDeckWeatherModule } from '../weather.js';
 import { WaDeckAutoUpdateModule } from '../auto-update.js';
 import { WaDeckUnreadModule } from '../unread.js';
 import { WaDeckCrmModule } from '../crm.js';
-import { WaDeckCallBriefModule } from '../call-brief.js';
 import { WaDeckFavoritesModule } from '../favorites.js';
 import { WaDeckImportantModule } from '../important.js';
 import { WaDeckScheduleModule } from '../schedule.js';
@@ -73,6 +73,7 @@ async function init() {
         console.warn('[layout] Corrupted sidebar width detected, resetting to default');
         appRoot.style.removeProperty('--sidebar-width');
         localStorage.removeItem('sidebarWidth');
+        localStorage.removeItem('sidebarWidthLite');
       }
     }
   }
@@ -80,6 +81,9 @@ async function init() {
   /* Accessibility: copy title → aria-label for all icon-only buttons */
   document.querySelectorAll('.btn-icon[title]').forEach((btn) => {
     if (!btn.getAttribute('aria-label')) btn.setAttribute('aria-label', btn.title);
+  });
+  document.querySelectorAll('.btn-toolbar-icon[title]').forEach((btn) => {
+    setToolbarLabel(btn, btn.title);
   });
 
   const moduleCtx = { state, els, setStatus, trimMapSize, runWithBusyButton };
@@ -97,13 +101,12 @@ async function init() {
        вызывающем коде не нужно. */
     for (const name of ['WaDeckGlobalSearch', 'WaDeckFavoritesModule', 'WaDeckImportantModule',
       'WaDeckUnreadFeed', 'WaDeckPinFeed', 'WaDeckSplitModule', 'WaDeckSignalPanel',
-      'WaDeckCrmModule', 'WaDeckCallBriefModule']) {
+      'WaDeckCrmModule']) {
       try { delete window[name]; } catch { window[name] = undefined; }
     }
   } else {
     window.WaDeckGlobalSearch?.init?.({ ...moduleCtx, isWebviewReady, safeExecuteInWebview });
     WaDeckCrmModule.init({ ...moduleCtx, activeAccount, selectedWebview });
-    WaDeckCallBriefModule.init({ ...moduleCtx, activeAccount, selectedWebview });
     WaDeckFavoritesModule.init({ ...moduleCtx, setActiveAccount, isWebviewReady, safeExecuteInWebview });
     WaDeckImportantModule.init({ ...moduleCtx, setActiveAccount, isWebviewReady, safeExecuteInWebview });
     window.WaDeckUnreadFeed?.init?.({ ...moduleCtx, setActiveAccount, isWebviewReady, safeExecuteInWebview });

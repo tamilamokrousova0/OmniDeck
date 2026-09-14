@@ -2,7 +2,7 @@
    drag reorder, context menus and refresh actions.
    Extracted verbatim from renderer.js. */
 import { state, els , LITE } from './state.js';
-import { setStatus, showConfirm } from './helpers.js';
+import { setStatus, showConfirm, setToolbarLabel } from './helpers.js';
 import {
   ensureWebview,
   cleanupWebview,
@@ -60,9 +60,9 @@ function updateFreezeButtonState() {
   if (!els.freezeActive) return;
   const frozen = Boolean(account?.frozen);
   els.freezeActive.classList.toggle('is-active', frozen);
-  els.freezeActive.title = frozen
+  setToolbarLabel(els.freezeActive, frozen
     ? 'Разморозить активный аккаунт'
-    : 'Заморозить/разморозить активный аккаунт';
+    : 'Заморозить/разморозить активный аккаунт');
 }
 
 function selectedWebview() {
@@ -226,12 +226,17 @@ function renderAccounts() {
     // Lovable-style: whole card is colored, icon/initials inside.
     // --tile carries the raw user color so the opt-in "calm tiles" CSS
     // (html[data-tile-normalize]) can re-blend it without losing the hue.
-    card.style.background = account.color;
+    /* В лайте сайдбар — список строк с именами (mockups/lite-compact-accounts.html):
+       цвет и иконка живут в свотче слева, а не заливают всю строку. */
+    const swatch = LITE ? document.createElement('span') : null;
+    if (swatch) swatch.className = 'account-swatch';
+    const painted = swatch || card;
+    painted.style.background = account.color;
     card.style.setProperty('--tile', account.color || '#8a93a6');
     if (account.iconUrl) {
-      card.style.backgroundImage = `url(${account.iconUrl})`;
-      card.style.backgroundSize = 'cover';
-      card.style.backgroundPosition = 'center';
+      painted.style.backgroundImage = `url(${account.iconUrl})`;
+      painted.style.backgroundSize = 'cover';
+      painted.style.backgroundPosition = 'center';
     }
 
     const label = document.createElement('span');
@@ -239,20 +244,17 @@ function renderAccounts() {
     label.textContent = account.name.slice(0, 2).toUpperCase();
     if (account.iconUrl) label.style.opacity = '0'; // hide text when icon set
 
+    // Имя целиком — в лайте оно заменяет двухбуквенные инициалы.
+    const nameEl = LITE ? document.createElement('span') : null;
+    if (nameEl) {
+      nameEl.className = 'account-name';
+      nameEl.textContent = account.name;
+    }
+
     card.addEventListener('dblclick', (event) => {
       event.preventDefault();
       event.stopPropagation();
       openAccountMenu(account.id);
-    });
-
-    const remove = document.createElement('button');
-    remove.className = 'account-remove';
-    remove.title = `Удалить ${account.name}`;
-    remove.textContent = '×';
-    remove.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      removeAccount(account.id).catch(console.error);
     });
 
     const unread = Number(state.unreadByAccount.get(account.id) || 0);
@@ -333,7 +335,8 @@ function renderAccounts() {
       showAccountContextMenu(e, account);
     });
 
-    card.append(remove, label);
+    if (swatch) card.append(swatch, nameEl);
+    else card.append(label);
     fragment.appendChild(card);
   }
 
@@ -647,6 +650,9 @@ async function removeAccount(accountId) {
   if (window.WaDeckImportantModule) window.WaDeckImportantModule.onAccountRemoved(accountId);
 
   state.accounts = state.accounts.filter((row) => row.id !== accountId);
+  // Кэш глобального поиска живёт в localStorage и переживает удаление:
+  // чистим здесь, когда аккаунта уже нет в списке.
+  if (window.WaDeckGlobalSearch?.onAccountRemoved) window.WaDeckGlobalSearch.onAccountRemoved();
   if (state.scheduleTarget.accountId === accountId) {
     state.scheduleTarget = { accountId: '', accountName: '', chatName: '' };
     WaDeckScheduleModule.renderScheduleTarget();

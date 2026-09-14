@@ -62,13 +62,26 @@ function collectUnreadChatsScript() {
       /* preview: the secondary text row (last message) — first line that is
          not the title, not a timestamp and not the bare badge counter */
       let preview = '';
+      /* Служебные строки WA («Непрочитанные сообщения: 7», «1 непрочитанное
+         сообщение», «7 unread messages») и инициалы аватара раньше уходили в
+         ленту вместо текста последнего сообщения. */
+      const isServiceLine = (l) => (
+        /^\\d{1,4}$/.test(l)                                   // голый счётчик
+        || /^[+]?\\d[\\d\\s()-]{0,3}$/.test(l)
+        || /непрочитан/i.test(l)                               // ru: «… непрочитанных сообщений»
+        || /\\bunread\\b/i.test(l)                              // en: «7 unread messages»
+        || /^[\\p{Lu}]{1,2}$/u.test(l)                          // инициалы аватара: «AM»
+        || /^(вы|you|черновик|draft)\\s*:?$/i.test(l)
+      );
       for (const line of lines) {
         if (line === name) continue;
         if (looksLikeTime(line)) continue;
-        if (/^\\d{1,4}$/.test(line)) continue;
+        if (isServiceLine(line)) continue;
         preview = line;
         break;
       }
+      // Честное пустое состояние вместо служебного мусора.
+      if (!preview) preview = '';
       if (preview.length > 80) preview = preview.slice(0, 80);
 
       out.push({ name, preview, count });

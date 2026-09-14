@@ -239,6 +239,9 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userData
     return { ok: true, removed: list.length - next.length };
   }
 
+  /* accountId → сколько раз подряд демон падал: даёт backoff в close-хендлере. */
+  const _restartFails = new Map();
+
   function restartDaemon(accountId) {
     stopDaemon(accountId, null);
     setStatus(accountId, 'error'); // панель покажет «перезапуск...»
@@ -407,8 +410,15 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userData
       { stdio: ['pipe', 'pipe', 'pipe'], detached: !IS_WIN },
     );
     const entry = { proc, deliberate: false, nextId: 1, pending: new Map() };
+    /* Запись в stdin умершей JVM даёт EPIPE асинхронно: без слушателя это
+       ошибка без обработчика, улетающая в глобальный uncaughtException. */
+    proc.stdin.on('error', () => {});
     daemons.set(accountId, entry);
     setStatus(accountId, 'running');
+
+    // Демон продержался минуту — считаем старт удачным и снимаем backoff.
+    const _settleTimer = setTimeout(() => _restartFails.delete(accountId), 60000);
+    if (typeof _settleTimer.unref === 'function') _settleTimer.unref();
 
     const rl = readline.createInterface({ input: proc.stdout });
     rl.on('line', (line) => {
@@ -448,18 +458,29 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userData
       // restartDaemon поднимал новый демон, и выкидывала из карты живой entry —
       // отправка навсегда падала в daemon_not_running при статусе running
       if (daemons.get(accountId) === entry) daemons.delete(accountId);
+      // Ожидающие ответа звонки иначе висят до своего 30-секундного таймаута,
+      // хотя отвечать уже некому.
+      for (const [, cb] of entry.pending) {
+        try { cb({ error: { message: 'daemon_exited' } }); } catch { /* ignore */ }
+      }
+      entry.pending.clear();
       if (entry.deliberate) return;
       const acc = accountById(accountId);
       if (!acc || acc.frozen) { setStatus(accountId, 'stopped'); return; }
       console.warn(`[signal] receive exited (code ${code}) for ${accountId}: ${stderrTail.trim()}`);
       setStatus(accountId, 'error', { error: stderrTail.trim().slice(-200) });
-      // ponytail: плоский ретрай раз в 15с, без backoff — упавший JVM-процесс
-      // либо поднимется, либо будет честно показывать error в панели
+      /* Перманентно падающий демон (сломанная Java, чужой lock, отвязанный
+         номер) при плоских 15 с поднимал JVM четыре раза в минуту вечно, а на
+         Windows каждый раз ещё и морозил UI синхронным pkill. Удваиваем паузу
+         до 5 минут; успешный старт сбрасывает счётчик. */
+      const fails = (_restartFails.get(accountId) || 0) + 1;
+      _restartFails.set(accountId, fails);
+      const backoff = Math.min(RETRY_MS * 2 ** (fails - 1), 5 * 60000);
       setTimeout(() => {
         if (!daemons.has(accountId) && accountById(accountId) && !accountById(accountId).frozen) {
           startDaemon(accountId);
         }
-      }, RETRY_MS);
+      }, backoff);
     });
   }
 
@@ -706,10 +727,19 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userData
 
   /* После долгого сна ОС сокет демона мог умереть молча: пересоздаём тех,
      кого нет в карте (webview-аккаунты перезагружает main отдельно). */
+  /* После сна типичная поломка — не мёртвый процесс, а живая JVM с оборванным
+     websocket к Signal: демон в карте, статус running, входящих нет. Проверка
+     «нет в daemons» этот случай не ловила вообще. Пингуем живые демоны и
+     перезапускаем те, что не ответили. */
   function resumeAfterSleep() {
     for (const acc of getAccounts() || []) {
       if (acc.type !== 'signal' || acc.frozen || !acc.signalNumber) continue;
-      if (!daemons.has(acc.id)) startDaemon(acc.id);
+      if (!daemons.has(acc.id)) { startDaemon(acc.id); continue; }
+      rpcRequest(acc.id, 'version', {}, 8000).then((res) => {
+        if (res?.ok) return;
+        console.warn('[signal] демон не ответил после сна, перезапуск:', acc.id);
+        restartDaemon(acc.id);
+      }).catch(() => restartDaemon(acc.id));
     }
   }
 

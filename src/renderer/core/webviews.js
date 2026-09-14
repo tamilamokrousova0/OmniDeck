@@ -284,6 +284,8 @@ function ensureWebview(account) {
       webview.executeJavaScript(voiceTranscribeButtonsScript(WADECK_WV_TOKEN), true)
         .catch((e) => console.warn('[voice-buttons-reload]', e));
     }
+    // Reload обнулил JS-контекст гостя: пересылаем флаг активности.
+    pushActiveFlag(webview, isActiveWebview(accountId), true);
   };
 
   const onFailLoad = (event) => {
@@ -375,6 +377,9 @@ function ensureWebview(account) {
       }
     }
 
+    // Реальная активность заново — до неё гость считает себя активным.
+    pushActiveFlag(webview, isActiveWebview(accountId), true);
+
     // Debounced status update on initial load (no full sidebar rebuild)
     if (_bindDomTimer) clearTimeout(_bindDomTimer);
     _bindDomTimer = setTimeout(() => {
@@ -408,6 +413,7 @@ function ensureWebview(account) {
     if (typeof slashTemplatesScript === 'function') {
       webview.executeJavaScript(slashTemplatesScript(WADECK_WV_TOKEN), true).catch((e) => console.warn('[slash-templates]', e));
     }
+    pushActiveFlag(webview, isActiveWebview(accountId), true);
 
     // Debounced status update — prevents excessive re-renders on SPA navigation
     if (_bindDomTimer) clearTimeout(_bindDomTimer);
@@ -742,7 +748,8 @@ function markAccountHibernated(accountId, hibernated) {
 function refreshWebviewVisibility() {
   const active = activeAccount();
   const isSignalActive = active?.type === 'signal';
-  const showHub = state.startupHubVisible || (!isSignalActive && (!state.activeAccountId || !selectedWebview()));
+  const showHub = state.startupHubVisible
+    || (!isSignalActive && (!state.activeAccountId || !selectedWebview()));
   setHubVisibility(showHub);
   window.WaDeckSignalPanel?.setVisible?.(isSignalActive && !state.startupHubVisible, active);
   let activeLoading = false;
@@ -760,16 +767,40 @@ function refreshWebviewVisibility() {
     }
     // Флаг активности для idle-backoff переводчика: фоновые webview тикают
     // реже. Пушим только при смене значения (dataset) → ≤2 инъекции на switch.
-    const flag = isActive ? '1' : '0';
+    const guestActive = accountId === state.activeAccountId;
+    const flag = guestActive ? '1' : '0';
     if (webview.dataset.wadeckActiveFlag !== flag && webview.dataset.waReady === '1') {
-      webview.dataset.wadeckActiveFlag = flag;
-      try {
-        webview.executeJavaScript(`(()=>{try{window.__waDeckWebviewActive=${isActive};}catch(e){}return 1;})()`, true).catch(() => {});
-      } catch { /* not attached — flag re-pushed next switch */ }
+      pushActiveFlag(webview, guestActive);
     }
   }
   showWebviewLoading(!showHub && activeLoading);
   refreshTweaksFabVisibility();
+}
+
+/* Флаг активности живёт в JS-контексте гостя и исчезает при reload, а
+   dataset на host-элементе — нет. Из-за этого после перезагрузки страницы
+   фоновый webview считался активным (переводчик тикал раз в секунду вместо
+   трёх) до следующего переключения аккаунта. force=true пересылает флаг
+   независимо от dataset — вызывается на каждом dom-ready и did-navigate. */
+function pushActiveFlag(webview, isActive, force = false) {
+  if (!webview || !webview.isConnected) return;
+  const flag = isActive ? '1' : '0';
+  if (!force && webview.dataset.wadeckActiveFlag === flag) return;
+  webview.dataset.wadeckActiveFlag = flag;
+  try {
+    webview.executeJavaScript(
+      `(()=>{try{window.__waDeckWebviewActive=${Boolean(isActive)};}catch(e){}return 1;})()`,
+      true,
+    ).catch(() => {});
+  } catch { /* not attached — flag re-pushed next switch */ }
+}
+
+/* Активность для гостевых скриптов — это «аккаунт, выбранный пользователем»,
+   а не «страница сейчас на экране»: класс .active снимается ещё и когда поверх
+   открыт рабочий раздел хаба, а переводчику в этот момент по-прежнему
+   полагается частота активного чата. */
+function isActiveWebview(accountId) {
+  return state.activeAccountId === accountId;
 }
 
 /**
@@ -1002,7 +1033,7 @@ async function sendAudioAsVoiceMessage() {
   if (!picked.ok) {
     const errMap = {
       file_too_large: 'Файл слишком большой (макс. 16 МБ)',
-      read_failed: 'Не удалось прочитать файл',
+      read_failed: 'Не удалось прочитать файл — проверьте формат и права доступа',
     };
     showToast(errMap[picked.error] || 'Ошибка загрузки файла', 'error');
     return;
@@ -1020,7 +1051,7 @@ async function sendAudioAsVoiceMessage() {
     getUserMedia_not_called: 'WhatsApp не запросил микрофон. Попробуйте снова.',
     audio_decode_failed: 'Не удалось декодировать аудиофайл.',
     audio_too_short: 'Аудиофайл слишком короткий (менее 0.3 сек).',
-    no_voice_state: 'Внутренняя ошибка состояния.',
+    no_voice_state: 'Не удалось отправить голосовое — попробуйте ещё раз.',
   };
 
   const stillReady = () => isWebviewReady(webview);
@@ -1029,7 +1060,7 @@ async function sendAudioAsVoiceMessage() {
     const setup = await safeExecuteInWebview(webview, voiceMessageSetupScript(picked.dataBase64, picked.mime));
     if (!setup?.ok) {
       const key = setup?.error || 'unknown';
-      showToast(errMessages[key] || `Ошибка: ${key}`, 'error', 5000);
+      showToast(errMessages[key] || 'Не удалось отправить голосовое — попробуйте ещё раз', 'error', 5000);
       return;
     }
 
@@ -1056,7 +1087,7 @@ async function sendAudioAsVoiceMessage() {
       /* getUserMedia not called — release (cleanup runs in finally) */
       if (stillReady()) webview.sendInputEvent({ type: 'mouseUp', x: pttX, y: pttY, button: 'left' });
       const key = waitResult?.error || 'unknown';
-      showToast(errMessages[key] || `Ошибка: ${key}`, 'error', 5000);
+      showToast(errMessages[key] || 'Не удалось отправить голосовое — попробуйте ещё раз', 'error', 5000);
       return;
     }
 

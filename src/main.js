@@ -10,7 +10,6 @@ const { pathToFileURL } = require('url');
 const os = require('os');
 const { transcribeVoiceAt, transcribeWavBase64, cleanupStaleModels, killWhisper } = require('./voice-transcribe');
 const { initSignal } = require('./signal');
-const { makeBrief, killBrief, briefAvailable } = require('./call-brief');
 
 /* Лайт-сборка: та же кодовая база, другой productName в electron-builder.
    Отличается только тем, ЧТО запускается: надстройки (переводчик, CRM,
@@ -259,6 +258,51 @@ const ALLOWED_WEBVIEW_PERMISSIONS = new Set([
   'clipboard-sanitized-write',
   'speaker-selection',
 ]);
+
+/* Split-браузер — обычный веб-сёрфинг по произвольным адресам. Давать ему тот
+   же набор, что WhatsApp/Telegram, значит выдавать камеру и микрофон любому
+   сайту без спроса. Безобидное (fullscreen, запись в буфер) разрешаем молча,
+   камеру/микрофон/уведомления спрашиваем один раз на origin за сессию. */
+const SPLIT_SILENT_PERMISSIONS = new Set([
+  'fullscreen',
+  'pointerLock',
+  'clipboard-sanitized-write',
+]);
+const SPLIT_ASKABLE_PERMISSIONS = new Map([
+  ['media', 'камере и микрофону'],
+  ['notifications', 'показу уведомлений'],
+]);
+const _splitPermissionAnswers = new Map(); // `${origin}:${permission}` → boolean
+
+function originOf(url) {
+  try { return new URL(String(url || '')).origin; } catch { return ''; }
+}
+
+function askSplitPermission(contents, permission) {
+  const origin = originOf(contents?.getURL?.()) || 'неизвестный сайт';
+  const key = `${origin}:${permission}`;
+  if (_splitPermissionAnswers.has(key)) return _splitPermissionAnswers.get(key);
+  const what = SPLIT_ASKABLE_PERMISSIONS.get(permission) || permission;
+  const parentWin = (mainWindow && !mainWindow.isDestroyed()) ? mainWindow : undefined;
+  let allowed = false;
+  try {
+    const choice = dialog.showMessageBoxSync(parentWin, {
+      type: 'question',
+      buttons: ['Запретить', 'Разрешить'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Запрос сайта',
+      message: `${origin} запрашивает доступ к ${what}.`,
+      detail: 'Ответ запомнится до перезапуска деки.',
+    });
+    allowed = choice === 1;
+  } catch (err) {
+    console.warn('[split-permission] dialog failed:', err?.message || err);
+    allowed = false;
+  }
+  _splitPermissionAnswers.set(key, allowed);
+  return allowed;
+}
 
 function setDockBadge(count, badgeDataUrl) {
   const safeCount = Math.max(0, Number(count) || 0);
@@ -1977,15 +2021,23 @@ function createWindow() {
       // ДО первой отрисовки, иначе надстройки успеют мигнуть на экране.
       additionalArguments: [
         ...(LITE ? ['--omnideck-lite'] : []),
-        /* Бриф звонка живёт только там, где рядом лежит llama-server: в CI он
-           не собирается, и в публичной сборке кнопка была бы мёртвой. Флаг
-           доезжает до renderer синхронно, поэтому кнопка не мигает. */
-        ...(briefAvailable() ? ['--omnideck-brief'] : []),
       ],
     },
   });
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+  /* macOS: window-all-closed НЕ завершает приложение, поэтому закрытие окна
+     раньше убивало renderer вместе с таймером планировщика и всеми webview —
+     дека оставалась в доке и выглядела рабочей, а расписание молча стояло.
+     Прячем окно вместо уничтожения: клик по иконке в доке возвращает его,
+     Cmd+Q (_appIsQuitting) и установка обновления (win.destroy) проходят. */
+  mainWindow.on('close', (event) => {
+    if (process.platform !== 'darwin') return;
+    if (_appIsQuitting) return;
+    event.preventDefault();
+    mainWindow.hide();
+  });
 
   // Орфография в полях самой деки (CRM, шаблоны, планировщик). Webview-поля
   // обслуживает обработчик в setupWebviewGuards — сюда их события не доходят.
@@ -2206,10 +2258,24 @@ function setupWebviewGuards() {
     if (ses && !_permissionConfiguredSessions.has(ses)) {
       _permissionConfiguredSessions.add(ses);
       configureSpellchecker(ses);
-      ses.setPermissionRequestHandler((_wc, permission, callback) => {
+      ses.setPermissionRequestHandler((wc, permission, callback) => {
+        if (isSplitBrowser) {
+          if (SPLIT_SILENT_PERMISSIONS.has(permission)) return callback(true);
+          if (SPLIT_ASKABLE_PERMISSIONS.has(permission)) return callback(askSplitPermission(wc, permission));
+          return callback(false);
+        }
         callback(ALLOWED_WEBVIEW_PERMISSIONS.has(permission));
       });
-      ses.setPermissionCheckHandler((_wc, permission) => ALLOWED_WEBVIEW_PERMISSIONS.has(permission));
+      ses.setPermissionCheckHandler((wc, permission, requestingOrigin) => {
+        if (isSplitBrowser) {
+          if (SPLIT_SILENT_PERMISSIONS.has(permission)) return true;
+          // Синхронная проверка не должна открывать диалог: отвечаем по уже
+          // данному ответу, иначе — нет.
+          const origin = requestingOrigin || originOf(wc?.getURL?.());
+          return _splitPermissionAnswers.get(`${origin}:${permission}`) === true;
+        }
+        return ALLOWED_WEBVIEW_PERMISSIONS.has(permission);
+      });
 
       /* Guest→host bridge preload (see src/preload-webview.js). Session-level
          registration is untouched by the will-attach-webview hardening that
@@ -2836,6 +2902,13 @@ function shellQuote(value) {
 
 async function installMacDownloadedUpdate() {
   if (!macUpdate.downloaded || !macUpdate.zipPath || !fsSync.existsSync(macUpdate.zipPath)) {
+    /* macOS сам чистит /var/folders: скачанный zip мог исчезнуть, а флаг
+       «готово к установке» оставался навсегда и глушил фоновые проверки —
+       тост кликался в пустоту до перезапуска. Сбрасываем и проверяем заново. */
+    macUpdate.downloaded = false;
+    macUpdate.zipPath = '';
+    updateDownloaded = false;
+    setTimeout(() => { checkForUpdatesNow('auto').catch(() => {}); }, 0);
     return { ok: false, error: 'not_downloaded' };
   }
 
@@ -3367,30 +3440,6 @@ function registerIpc() {
     return { ok: true };
   });
 
-  handle('call-brief', async (_event, payload) => {
-    const raw = Array.isArray(payload?.messages) ? payload.messages : [];
-    // Обрезаем на входе: renderer уже ограничивает, но IPC — граница доверия,
-    // а лишние сообщения молча вылезли бы за контекст модели.
-    const messages = raw.slice(-100).map((m) => ({
-      me: Boolean(m?.me),
-      text: clampString(String(m?.text || '').trim(), 600),
-      // без даты ломаются и «общаемся N дней», и отбор свежих двух дней
-      at: clampString(String(m?.at || '').trim(), 40),
-    })).filter((m) => m.text);
-    if (!messages.length) return { ok: false, error: 'нет сообщений' };
-    return makeBrief(messages, {
-      contactName: clampString(String(payload?.contactName || '').trim(), LIMITS.CHAT_NAME),
-      crmAbout: clampString(String(payload?.crmAbout || '').trim(), 4000),
-      crmMine: clampString(String(payload?.crmMine || '').trim(), 4000),
-      parentWindow: mainWindow,
-      onProgress: (info) => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('call-brief-progress', info);
-        }
-      },
-    });
-  });
-
   handle('schedule-message', async (_event, payload) => {
     const accountId = String(payload?.accountId || '');
     const chatName = clampString(String(payload?.chatName || '').trim(), LIMITS.CHAT_NAME);
@@ -3491,6 +3540,16 @@ function registerIpc() {
 
   handle('cancel-scheduled', async (_event, id) => {
     return cancelScheduled(String(id || ''));
+  });
+
+  /* Статус задания на момент вызова. Исполнитель в renderer сверяется с ним
+     непосредственно перед необратимым действием (Enter / клик «Отправить»):
+     claim выдаёт КОПИЮ задания, поэтому отмена, пришедшая после claim, иначе
+     остаётся невидимой и «отменённое» сообщение всё равно уходит. */
+  handle('scheduled-status', async (_event, id) => {
+    const item = state.store.scheduled.find((row) => row.id === String(id || ''));
+    if (!item) return { ok: false, error: 'not_found' };
+    return { ok: true, status: item.status };
   });
 
   /* Make a pending/failed item due right now so the renderer's runner sends it
@@ -3921,7 +3980,9 @@ function registerIpc() {
   });
 
   handle('install-downloaded-update', async () => {
-    try { signalService?.stopAll(); } catch { /* демоны не должны пережить рестарт */ }
+    /* stopAll() раньше стоял ПЕРЕД проверками: клик «Установить» до конца
+       загрузки или из DMG гасил демоны Signal, возвращал ошибку и оставлял
+       Signal мёртвым до перезапуска. Теперь гасим только когда уходим. */
     if (!app.isPackaged) {
       return { ok: false, error: 'not_packaged' };
     }
@@ -3937,6 +3998,7 @@ function registerIpc() {
       return { ok: false, error: 'not_downloaded' };
     }
     try {
+      try { signalService?.stopAll(); } catch { /* демоны не должны пережить рестарт */ }
       // Prevent before-quit handler from interfering
       _appIsQuitting = true;
 
@@ -4337,14 +4399,14 @@ if (addSingleInstanceGuard()) {
   /* Flush pending store writes before exit */
   // SIGTERM/SIGINT (pkill, Ctrl+C) убивали Electron мимо before-quit —
   // signal-cli-демоны оставались сиротами и съедали входящие у нового запуска
-  process.on('SIGTERM', () => { try { signalService?.stopAll(); killWhisper(); killBrief(); } catch { /* ignore */ } app.quit(); });
-  process.on('SIGINT', () => { try { signalService?.stopAll(); killWhisper(); killBrief(); } catch { /* ignore */ } app.quit(); });
+  process.on('SIGTERM', () => { try { signalService?.stopAll(); killWhisper(); } catch { /* ignore */ } app.quit(); });
+  process.on('SIGINT', () => { try { signalService?.stopAll(); killWhisper(); } catch { /* ignore */ } app.quit(); });
 
   app.on('before-quit', async (event) => {
     if (_appIsQuitting) return;
     _appIsQuitting = true;
     event.preventDefault();
-    try { signalService?.stopAll(); killWhisper(); killBrief(); } catch { /* ignore */ }
+    try { signalService?.stopAll(); killWhisper(); } catch { /* ignore */ }
     try {
       // Bounded wait: a wedged disk write (stalled network volume, hung
       // fsync) must not make the app unquittable.
@@ -4363,6 +4425,10 @@ if (addSingleInstanceGuard()) {
   });
 
   app.on('activate', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      return;
+    }
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 }

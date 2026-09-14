@@ -34,6 +34,40 @@ function translatorBarScript(token) {
       document.querySelectorAll('.__wadeck-tr-overlay').forEach((o) => o.remove());
     } catch {}
 
+    /* Тема WhatsApp Web читается по фактическому фону страницы: раньше бар был
+       захардкожен светлым, а его же дропдаун и оверлеи — тёмными, и набор
+       выглядел чужеродно в обеих темах WA. Один источник правды на все
+       элементы переводчика. */
+    function waIsDark() {
+      try {
+        const probe = document.querySelector('#app') || document.body;
+        const bg = getComputedStyle(probe).backgroundColor || '';
+        const m = bg.match(/rgba?\(([^)]+)\)/);
+        if (!m) return document.documentElement.classList.contains('dark');
+        const [r, g, b] = m[1].split(',').map((v) => parseFloat(v));
+        // Относительная яркость: тёмная тема WA даёт ~0.05-0.15
+        return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.5;
+      } catch {
+        return false;
+      }
+    }
+
+    function palette() {
+      return waIsDark()
+        ? {
+          barBg: '#1f2c33', barFg: '#e9edef', barBorder: '#2a3942',
+          menuBg: '#233138', menuFg: '#e9edef', menuHover: 'rgba(255,255,255,0.08)',
+          overlayBg: 'rgba(31,44,51,0.97)', overlayFg: '#e9edef',
+          muted: '#8696a0', accent: '#00a884',
+        }
+        : {
+          barBg: '#eff6e4', barFg: '#1a2030', barBorder: '#d8e4c6',
+          menuBg: '#ffffff', menuFg: '#1a2030', menuHover: 'rgba(0,0,0,0.06)',
+          overlayBg: 'rgba(255,255,255,0.98)', overlayFg: '#111b21',
+          muted: '#667781', accent: '#008069',
+        };
+    }
+
     const LANGS = [
       { code: 'auto', label: '🔍 Авто' },
       { code: 'ru', label: 'Русский' },
@@ -152,6 +186,7 @@ function translatorBarScript(token) {
     // ========== Bar ==========
 
     function createBar() {
+      const P = palette();
       bar = document.createElement('div');
       bar.id = '__wadeck-translator-bar';
       bar.style.cssText = [
@@ -159,12 +194,18 @@ function translatorBarScript(token) {
         'align-items:center',
         'gap:10px',
         'padding:7px 14px',
-        'background:#eff6e4',
-        'border-bottom:1px solid #d8e4c6',
+        'background:' + P.barBg,
+        'border-top:1px solid ' + P.barBorder,
+        'box-shadow:0 -4px 12px rgba(0,0,0,0.08)',
         'font-family:Avenir Next,Segoe UI,system-ui,sans-serif',
         'font-size:12.5px',
-        'color:#1a2030',
-        'position:relative',
+        'color:' + P.barFg,
+        // Поверх ленты сообщений, прямо над композером: в потоке бар отжимал
+        // всю переписку на 40px вверх при каждом показе/скрытии.
+        'position:absolute',
+        'left:0',
+        'right:0',
+        'bottom:0',
         'z-index:50',
         'min-height:40px',
         'box-sizing:border-box',
@@ -182,7 +223,7 @@ function translatorBarScript(token) {
       // ── Separator ──
       const sep = document.createElement('span');
       sep.textContent = '·';
-      sep.style.cssText = 'color:#9ca3af;flex-shrink:0;padding:0 2px;font-size:14px;';
+      sep.style.cssText = 'color:' + P.muted + ';flex-shrink:0;padding:0 2px;font-size:14px;';
       bar.appendChild(sep);
 
       // ── Outgoing section ──
@@ -192,7 +233,7 @@ function translatorBarScript(token) {
 
       const arrow = document.createElement('span');
       arrow.textContent = '→';
-      arrow.style.cssText = 'color:#9ca3af;flex-shrink:0;font-size:13px;';
+      arrow.style.cssText = 'color:' + P.muted + ';flex-shrink:0;font-size:13px;';
       bar.appendChild(arrow);
 
       const toBtn = createDropdownBtn('to');
@@ -397,19 +438,20 @@ function translatorBarScript(token) {
 
       dropdownOpen = type;
 
+      const P = palette();
       const dd = document.createElement('div');
       dd.className = '__wadeck-translator-dd';
       dd.style.cssText = [
         'position:absolute',
-        'top:calc(100% + 4px)',
+        'bottom:calc(100% + 4px)',
         'left:0',
-        'background:#1a2030',
-        'border:1px solid #2b313b',
+        'background:' + P.menuBg,
+        'border:1px solid ' + P.barBorder,
         'border-radius:8px',
         'padding:4px',
         'z-index:100',
         'min-width:145px',
-        'box-shadow:0 8px 24px rgba(0,0,0,0.5)',
+        'box-shadow:0 8px 24px rgba(0,0,0,0.28)',
       ].join(';');
 
       list.forEach((lang) => {
@@ -420,10 +462,10 @@ function translatorBarScript(token) {
           'border-radius:5px',
           'cursor:pointer',
           'font-size:12.5px',
-          'color:' + (lang.code === current ? '#3dd68c' : '#e5eaf0'),
+          'color:' + (lang.code === current ? P.accent : P.menuFg),
           'font-weight:' + (lang.code === current ? '600' : '400'),
         ].join(';');
-        item.addEventListener('mouseenter', () => { item.style.background = 'rgba(255,255,255,0.06)'; });
+        item.addEventListener('mouseenter', () => { item.style.background = P.menuHover; });
         item.addEventListener('mouseleave', () => { item.style.background = 'transparent'; });
         item.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -698,6 +740,7 @@ function translatorBarScript(token) {
       const existing = target.querySelector(':scope > .__wadeck-tr-overlay');
       if (existing) existing.remove();
 
+      const P = palette();
       const ov = document.createElement('div');
       ov.className = '__wadeck-tr-overlay';
       ov.style.cssText = [
@@ -706,17 +749,17 @@ function translatorBarScript(token) {
         'left:0',
         'right:0',
         'min-height:100%',
-        'background:rgba(24,30,43,0.96)',
-        'border:1px solid rgba(45,140,240,0.55)',
+        'background:' + P.overlayBg,
+        'border:1px solid ' + P.barBorder,
         'border-radius:8px',
         'padding:24px 12px 10px 12px',
-        'color:#e5eaf0',
+        'color:' + P.overlayFg,
         'font-size:13px',
         'line-height:1.4',
         'z-index:9999',
         'box-sizing:border-box',
         'pointer-events:auto',
-        'box-shadow:0 2px 10px rgba(0,0,0,0.4)',
+        'box-shadow:0 2px 10px rgba(0,0,0,0.22)',
         // WhatsApp Web sets user-select:none on most chat surfaces so its
         // own bubble copy/paste can stay controlled. We explicitly opt back
         // in for our overlay so users can select & copy translated text.
@@ -758,13 +801,13 @@ function translatorBarScript(token) {
       ov.appendChild(closeBtn);
 
       const metaEl = document.createElement('span');
-      metaEl.textContent = 'auto → ru';
+      metaEl.textContent = 'авто → рус';
       metaEl.style.cssText = [
         'position:absolute',
         'top:7px',
         'right:10px',
         'font-size:10px',
-        'color:#7e8ea0',
+        'color:' + P.muted,
         'letter-spacing:0.02em',
       ].join(';');
       ov.appendChild(metaEl);
@@ -1019,15 +1062,36 @@ function translatorBarScript(token) {
 
     // ========== Bar lifecycle ==========
 
+    // Бар лежит absolute в родителе футера; bottom = высота футера, чтобы он
+    // сидел над композером и поднимался вместе с ним при многострочном вводе.
+    let footerRO = null;
+    let footerObserved = null;
+    function syncBarBottom() {
+      if (!bar || !bar.isConnected) return;
+      const footer = bar.parentElement && bar.parentElement.querySelector(':scope > footer');
+      if (!footer) return;
+      const h = footer.offsetHeight;
+      if (bar.style.bottom !== h + 'px') bar.style.bottom = h + 'px';
+      if (footerObserved !== footer && typeof ResizeObserver === 'function') {
+        try { if (footerRO) footerRO.disconnect(); } catch {}
+        footerRO = new ResizeObserver(() => syncBarBottom());
+        footerRO.observe(footer);
+        footerObserved = footer;
+      }
+    }
+
     function ensureBarInjected() {
-      if (bar && bar.isConnected) return true;
+      if (bar && bar.isConnected) { syncBarBottom(); return true; }
       const existing = document.getElementById('__wadeck-translator-bar');
       if (existing) existing.remove();
       bar = null;
       const footer = document.querySelector('footer');
       if (!footer || !footer.parentElement) return false;
       createBar();
-      footer.parentElement.insertBefore(bar, footer);
+      const host = footer.parentElement;
+      if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+      host.insertBefore(bar, footer);
+      syncBarBottom();
       return true;
     }
 

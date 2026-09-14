@@ -9,6 +9,7 @@
 import { WaDeckPinFeed } from './pin-feed.js';
 import { showToast } from './core/helpers.js';
 import { updateHubDashboard, updateHubFilters } from './core/hub.js';
+import { refreshWebviewVisibility } from './core/webviews.js';
 
   let state = null;
   let setActiveAccount = null;
@@ -71,15 +72,17 @@ import { updateHubDashboard, updateHubFilters } from './core/hub.js';
     document.getElementById('hub-tab-important')?.addEventListener('click', () => setTab('imp'));
   }
 
-  /* tab: 'accounts' — карточки аккаунтов; 'all'/'fav'/'imp' — лента. */
+  /* tab: 'accounts' — карточки; 'all'/'fav'/'imp' — лента. */
   function setTab(tab) {
     const overlay = overlayEl();
     if (!overlay) return;
     state.hubTab = tab;
     const feedTab = tab !== 'accounts';
     if (feedTab) _feedMode = tab;
+
     overlay.classList.toggle('huf-active', feedTab);
     updateHubFilters();
+    refreshWebviewVisibility();
     if (feedTab) {
       render();
     } else {

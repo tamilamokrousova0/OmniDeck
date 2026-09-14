@@ -58,7 +58,6 @@ const state = {
   zoomByAccount: new Map(),
   _hubClockTimer: null,
   hubFilter: 'all', // 'all' | 'unread' | 'favorites' | 'important'
-  hubPendingCount: 0,
 };
 
 /* Лайт-сборка. Флаг приходит из preload синхронно (additionalArguments),
@@ -68,7 +67,6 @@ const LITE = Boolean(window.waDeck?.lite);
 if (LITE) document.body.classList.add('is-lite');
 if (window.waDeck?.mac) document.body.classList.add('is-mac');
 /* Бриф показываем только когда в сборке есть llama-server. */
-if (!window.waDeck?.briefAvailable) document.body.classList.add('no-brief');
 
 const els = {
   appRoot: document.getElementById('app-root'),
@@ -171,11 +169,6 @@ const els = {
   closeReleaseNotes: document.getElementById('close-release-notes'),
 
   crmModal: document.getElementById('crm-modal'),
-  callBriefModal: document.getElementById('call-brief-modal'),
-  callBriefHead: document.getElementById('call-brief-head'),
-  callBriefText: document.getElementById('call-brief-text'),
-  callBriefBtn: document.getElementById('call-brief-btn'),
-  callBriefClose: document.getElementById('call-brief-close'),
   crmContactName: document.getElementById('crm-contact-name'),
   crmAbout: document.getElementById('crm-about'),
   crmMyInfo: document.getElementById('crm-my-info'),

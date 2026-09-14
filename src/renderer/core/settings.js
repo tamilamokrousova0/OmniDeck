@@ -24,6 +24,7 @@ function applyTheme(theme) {
 /* ── Clocks Settings ── */
 
 function renderClocksSettings() {
+  fillTimezoneSelect(els.clockNewTz);
   const list = els.clocksSettingsList;
   if (!list) return;
   list.innerHTML = '';
@@ -77,27 +78,61 @@ function renderClocksSettings() {
   }
 }
 
+/* Смещение на СЕГОДНЯ из самой зоны. Статические подписи врали при переходе
+   на летнее время и после реформ (Алматы стал +5, а в списке висело +6). */
+function utcOffsetLabel(timeZone, at = new Date()) {
+  try {
+    const name = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' })
+      .formatToParts(at)
+      .find((part) => part.type === 'timeZoneName')?.value || '';
+    const m = name.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+    if (!m) return '';
+    const sign = m[1] === '-' ? '−' : '+';           // U+2212 как в прежних подписях
+    const minutes = m[3] && m[3] !== '00' ? `:${m[3]}` : '';
+    return `${sign}${Number(m[2])}${minutes}`;
+  } catch {
+    return '';
+  }
+}
+
+/* Форма «добавить часы» в разметке держит только плейсхолдер: города и
+   смещения приходят отсюда, чтобы подписи не разъезжались с живым списком. */
+function fillTimezoneSelect(select) {
+  if (!select || select.dataset.tzFilled === '1') return;
+  for (const opt of getTimezoneOptions()) {
+    const o = document.createElement('option');
+    o.value = opt.value;
+    o.textContent = opt.label;
+    select.appendChild(o);
+  }
+  select.dataset.tzFilled = '1';
+}
+
 function getTimezoneOptions() {
-  return [
-    { value: 'Pacific/Auckland', label: 'Окленд +12' },
-    { value: 'Asia/Tokyo', label: 'Токио +9' },
-    { value: 'Asia/Shanghai', label: 'Шанхай +8' },
-    { value: 'Asia/Bangkok', label: 'Бангкок +7' },
-    { value: 'Asia/Almaty', label: 'Алматы +6' },
-    { value: 'Asia/Tashkent', label: 'Ташкент +5' },
-    { value: 'Asia/Dubai', label: 'Дубай +4' },
-    { value: 'Europe/Moscow', label: 'Москва +3' },
-    { value: 'Europe/Kiev', label: 'Киев +2/+3' },
-    { value: 'Europe/Berlin', label: 'Берлин +1/+2' },
-    { value: 'Europe/London', label: 'Лондон +0/+1' },
-    { value: 'Atlantic/Azores', label: 'Азоры −1' },
-    { value: 'America/Sao_Paulo', label: 'Сан-Паулу −3' },
-    { value: 'America/New_York', label: 'Нью-Йорк −5' },
-    { value: 'America/Chicago', label: 'Чикаго −6' },
-    { value: 'America/Denver', label: 'Денвер −7' },
-    { value: 'America/Los_Angeles', label: 'Лос-Анж. −8' },
-    { value: 'Pacific/Honolulu', label: 'Гонолулу −10' },
+  const cities = [
+    { value: 'Pacific/Auckland', city: 'Окленд' },
+    { value: 'Asia/Tokyo', city: 'Токио' },
+    { value: 'Asia/Shanghai', city: 'Шанхай' },
+    { value: 'Asia/Bangkok', city: 'Бангкок' },
+    { value: 'Asia/Almaty', city: 'Алматы' },
+    { value: 'Asia/Tashkent', city: 'Ташкент' },
+    { value: 'Asia/Dubai', city: 'Дубай' },
+    { value: 'Europe/Moscow', city: 'Москва' },
+    { value: 'Europe/Kiev', city: 'Киев' },
+    { value: 'Europe/Berlin', city: 'Берлин' },
+    { value: 'Europe/London', city: 'Лондон' },
+    { value: 'Atlantic/Azores', city: 'Азоры' },
+    { value: 'America/Sao_Paulo', city: 'Сан-Паулу' },
+    { value: 'America/New_York', city: 'Нью-Йорк' },
+    { value: 'America/Chicago', city: 'Чикаго' },
+    { value: 'America/Denver', city: 'Денвер' },
+    { value: 'America/Los_Angeles', city: 'Лос-Анж.' },
+    { value: 'Pacific/Honolulu', city: 'Гонолулу' },
   ];
+  return cities.map(({ value, city }) => {
+    const off = utcOffsetLabel(value);
+    return { value, label: off ? `${city} ${off}` : city };
+  });
 }
 
 /**
@@ -196,7 +231,6 @@ function openSettingsPanel() {
 
 function closeSettingsPanel() {
   state.panelHidden = true;
-  // Closing the panel always leaves schedule edit mode (if any)
   WaDeckScheduleModule.cancelScheduleEditMode?.();
   updatePanelVisibility();
   els.togglePanel?.classList.remove('is-active');
@@ -257,7 +291,6 @@ function applyTileMode(mode) {
 
 function showSettingsMenu() {
   if (!els.settingsViewMenu || !els.settingsViewDetail) return;
-  // Leaving the schedule section cancels a pending edit (if any)
   if (state._openSettingsSection === 'schedule') {
     WaDeckScheduleModule.cancelScheduleEditMode?.();
   }
@@ -279,7 +312,6 @@ function showSettingsSection(key) {
   if (!els.settingsViewMenu || !els.settingsViewDetail) return;
   const section = els.settingsViewDetail.querySelector(`.settings-section[data-settings-section="${CSS.escape(key)}"]`);
   if (!section) return;
-  // Switching away from the schedule section cancels a pending edit
   if (state._openSettingsSection === 'schedule' && key !== 'schedule') {
     WaDeckScheduleModule.cancelScheduleEditMode?.();
   }

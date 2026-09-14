@@ -117,7 +117,11 @@ function detectSystemJava() {
   candidates.push('java');
   for (const java of candidates) {
     try {
-      const r = spawnSync(java, ['-version'], { encoding: 'utf8', shell: IS_WIN });
+      /* Без shell: JAVA_HOME вида C:\\Program Files\\... рвался по пробелу, и
+         системная Java «не находилась» — дека тянула лишние 58 МБ JRE.
+         timeout: зависшая java (сетевой JAVA_HOME) иначе морозит main,
+         потому что provisioned() зовётся синхронно из getStatuses. */
+      const r = spawnSync(java, ['-version'], { encoding: 'utf8', timeout: 10000, windowsHide: true });
       const out = `${r.stdout || ''}${r.stderr || ''}`;
       const m = out.match(/version "(\d+)/);
       if (m && Number(m[1]) >= JRE_MAJOR) return java === 'java' ? 'PATH' : home;
@@ -138,35 +142,70 @@ function provisioned(userData) {
 
 /* ── загрузка ─────────────────────────────────────────────────────────── */
 
-function download(url, dest, expectSha, expectSize, onBytes) {
+/* Обрыв TCP посреди 120 МБ раньше вешал промис навсегда: у ответа не было
+   обработчика ошибок, pipe не доходил до finish, и установка Signal
+   «шла» до перезапуска деки, блокируя повторную попытку. */
+const DOWNLOAD_IDLE_MS = 60000;
+
+function download(url, dest, expectSha, expectSize, onBytes, isCancelled = () => false) {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash('sha256');
     let got = 0;
     let redirects = 0;
+    let settled = false;
+    let idleTimer = null;
+    let current = null; // активный response, чтобы рвать его при отмене
+
+    const finish = (err) => {
+      if (settled) return;
+      settled = true;
+      if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+      if (err) {
+        try { current?.destroy(); } catch { /* already gone */ }
+        // Недокачанный файл не оставляем: он весит как полный.
+        fs.promises.unlink(dest).catch(() => {});
+        reject(err);
+      } else {
+        resolve();
+      }
+    };
+
+    const armIdle = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => finish(new Error('download_stalled')), DOWNLOAD_IDLE_MS);
+    };
 
     const go = (target) => {
-      https.get(target, { headers: { 'User-Agent': 'OmniDeck' } }, (res) => {
+      const req = https.get(target, { headers: { 'User-Agent': 'OmniDeck' } }, (res) => {
+        current = res;
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           res.resume();
-          if (++redirects > 6) return reject(new Error('too_many_redirects'));
+          if (++redirects > 6) return finish(new Error('too_many_redirects'));
           return go(new URL(res.headers.location, target).toString());
         }
-        if (res.statusCode !== 200) { res.resume(); return reject(new Error(`http_${res.statusCode}`)); }
+        if (res.statusCode !== 200) { res.resume(); return finish(new Error(`http_${res.statusCode}`)); }
         const total = Number(res.headers['content-length'] || expectSize || 0);
         const file = fs.createWriteStream(dest);
+        armIdle();
         res.on('data', (chunk) => {
+          if (isCancelled()) return finish(new Error('cancelled'));
           hash.update(chunk);
           got += chunk.length;
+          armIdle();
           if (onBytes) onBytes(got, total);
         });
+        res.on('error', finish);
         res.pipe(file);
-        file.on('error', reject);
+        file.on('error', finish);
         file.on('finish', () => {
+          if (settled) return;
           const sum = hash.digest('hex');
-          if (expectSha && sum !== expectSha) return reject(new Error('checksum_mismatch'));
-          resolve();
+          if (expectSha && sum !== expectSha) return finish(new Error('checksum_mismatch'));
+          finish(null);
         });
-      }).on('error', reject);
+      });
+      req.on('error', finish);
+      req.setTimeout(DOWNLOAD_IDLE_MS, () => finish(new Error('download_timeout')));
     };
     go(url);
   });
@@ -175,7 +214,10 @@ function download(url, dest, expectSha, expectSize, onBytes) {
 /* tar есть и в macOS, и в Windows 10+ (bsdtar), и понимает оба формата */
 function extract(archive, into) {
   return new Promise((resolve, reject) => {
-    const p = spawn('tar', ['-xf', archive, '-C', into], { shell: IS_WIN });
+    /* Без shell: через cmd.exe аргументы склеиваются без кавычек, и
+       C:\\Users\\Имя Фамилия\\AppData\\Local\\Temp рвал команду. tar.exe лежит в
+       System32 и запускается напрямую. */
+    const p = spawn('tar', ['-xf', archive, '-C', into], { windowsHide: true });
     let err = '';
     p.stderr.on('data', (c) => { err += String(c).slice(0, 200); });
     p.on('error', reject);
@@ -192,7 +234,10 @@ async function provision(userData, onProgress = () => {}, isCancelled = () => fa
 
   const root = rootDir(userData);
   await fsp.mkdir(root, { recursive: true });
-  const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'omnideck-signal-'));
+  /* Стейджинг на том же томе, что и финальная папка: rename между разными
+     томами (Windows с %TEMP% на другом диске, userData на внешнем) падает
+     с EXDEV, и установка Signal не проходила вообще. */
+  const tmp = await fsp.mkdtemp(path.join(root, '.tmp-install-'));
   const cancelled = () => { if (isCancelled()) throw new Error('cancelled'); };
 
   try {
@@ -202,7 +247,7 @@ async function provision(userData, onProgress = () => {}, isCancelled = () => fa
       cancelled();
       await download(CLI.url, archive, CLI.sha256, CLI.size, (got, total) => {
         onProgress({ stage: 'cli', percent: total ? Math.round((got / total) * 100) : 0 });
-      });
+      }, isCancelled);
       cancelled();
       onProgress({ stage: 'unpack', percent: 0 });
       const stage = path.join(tmp, 'cli');
@@ -226,7 +271,7 @@ async function provision(userData, onProgress = () => {}, isCancelled = () => fa
         cancelled();
         await download(spec.url, archive, spec.sha256, spec.size, (got, total) => {
           onProgress({ stage: 'jre', percent: total ? Math.round((got / total) * 100) : 0 });
-        });
+        }, isCancelled);
         cancelled();
         onProgress({ stage: 'unpack', percent: 50 });
         const stage = path.join(tmp, 'jre');

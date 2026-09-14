@@ -341,36 +341,6 @@ html[data-theme='light'] .sidebar-resize-handle.active {
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
 }
 
-.account-remove {
-  position: absolute;
-  top: -4px;
-  left: -4px;
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  border: 2px solid var(--bg);
-  background: var(--red);
-  color: #fff;
-  font-size: 10px;
-  line-height: 1;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  padding: 0;
-  opacity: 0;
-  transition: opacity 0.15s ease, transform 0.15s ease;
-  z-index: 3;
-}
-
-.account-item:hover .account-remove {
-  opacity: 1;
-}
-
-.account-remove:hover {
-  transform: scale(1.15);
-  background: #e84848;
-}
-
 .account-status-dot {
   position: absolute;
   bottom: -1px;
@@ -397,9 +367,7 @@ html[data-theme='light'] .sidebar-resize-handle.active {
   z-index: 2;
 }
 
-/* Pin marker in the sidebar — bottom-right. Other three corners are
-   already used: top-left (.account-remove ×), top-right (.account-unread),
-   bottom-left (.account-type-badge / .account-frozen-tag). */
+/* Pin marker in the sidebar — bottom-right. */
 .account-pin-tag {
   position: absolute;
   bottom: -4px;
@@ -507,6 +475,11 @@ html[data-theme='light'] .sidebar-resize-handle.active {
 }
 
 .btn-toolbar-icon {
+  /* position: relative обязателен — от него отсчитывается ::after-подсказка.
+     Без него она позиционировалась от header.toolbar, и ВСЕ подсказки
+     всплывали в центре панели вместо своей кнопки. Совпадение работало лишь
+     у отключённых кнопок: filter в .btn:disabled сам создаёт containing block. */
+  position: relative;
   width: 32px;
   min-width: 32px;
   height: 32px;
@@ -518,54 +491,46 @@ html[data-theme='light'] .sidebar-resize-handle.active {
   box-shadow: none;
 }
 
-/* ── Hover label on toolbar icons (inline expansion, matches screenshot) ──
-   The hovered button grows horizontally to reveal its label right next to
-   the icon — the visual style seen in the reference screenshot. The layout
-   shift on neighbours is mitigated by:
-     • short 160 ms transition (snappy, not sluggish),
-     • no scale() on hover (removed earlier),
-     • 80 ms enter delay so fast mouse-passes don't trigger expansion. */
+/* ── Toolbar: только компактные иконки. Названия остаются в title/aria-label,
+   чтобы не раздвигать панель при наведении и не отвлекать от переписки. */
 .btn-toolbar-icon.btn-toolbar-expand {
-  position: relative;
-  overflow: hidden;
-  white-space: nowrap;
-  gap: 0;
-  /* Smooth, unhurried expansion (≈ 320 ms) with a gentle ease curve */
-  transition:
-    background 0.18s ease,
-    color 0.18s ease,
-    width 0.32s cubic-bezier(0.22, 1, 0.36, 1),
-    padding 0.32s cubic-bezier(0.22, 1, 0.36, 1),
-    gap 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
 }
 .btn-toolbar-expand .btn-toolbar-label {
-  display: inline-block;
-  max-width: 0;
-  opacity: 0;
-  overflow: hidden;
-  font-size: 12px;
+  display: none;
+}
+
+/* Компактные кнопки toolbar получают явную подсказку в одном визуальном языке
+   приложения; нативный title остаётся резервом для доступности. */
+.btn-toolbar-icon[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  z-index: 1200;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translate(-50%, -3px);
+  width: max-content;
+  max-width: 240px;
+  padding: 6px 8px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-sm);
+  background: var(--bg-1);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+  color: var(--text-strong);
+  font-size: 11px;
   font-weight: 500;
-  color: currentColor;
-  letter-spacing: -0.01em;
+  line-height: 1.25;
+  white-space: nowrap;
+  opacity: 0;
   pointer-events: none;
-  transition:
-    max-width 0.32s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.22s ease;
+  transition: opacity 0.12s ease, transform 0.12s ease;
 }
-.btn-toolbar-expand:hover,
-.btn-toolbar-expand.is-active {
-  width: auto;
-  padding: 0 12px 0 9px;
-  gap: 7px;
-}
-.btn-toolbar-expand:hover .btn-toolbar-label,
-.btn-toolbar-expand.is-active .btn-toolbar-label {
-  max-width: 160px;
+.btn-toolbar-icon[data-tooltip]:hover::after,
+.btn-toolbar-icon[data-tooltip]:focus-visible::after {
   opacity: 1;
-  /* Fade the text in slightly after the button starts widening */
-  transition:
-    max-width 0.32s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.24s ease 0.08s;
+  transform: translate(-50%, 0);
 }
 
 .btn-toolbar-icon:active {
@@ -1712,10 +1677,6 @@ html[data-theme='light'] .account-unread {
 }
 
 html[data-theme='light'] .account-status-dot {
-  border-color: #f1f6ff;
-}
-
-html[data-theme='light'] .account-remove {
   border-color: #f1f6ff;
 }
 
@@ -4373,15 +4334,6 @@ html[data-theme='light'] .add-account-btn:hover {
   text-align: left;
   margin: 0 0 4px;
 }
-/* Out-of-hours motivational phrase (23:00–08:59) — set in the accent green
-   so it reads as a state change, at the same scale as the brand title. */
-.hub-title--motivation {
-  color: var(--green);
-  font-weight: 700;
-  font-size: 26px;
-  line-height: 1.2;
-  letter-spacing: -0.015em;
-}
 /* Greeting line above title */
 .hub-greeting {
   display: flex;
@@ -4503,6 +4455,22 @@ html[data-theme='light'] .add-account-btn:hover {
   max-height: none;
   overflow: visible;
 }
+
+/* Рабочий хаб использует ширину приложения, а не выглядит маленькой
+   приветственной карточкой на декоративном фоне. */
+.webviews.hub-mode .hub-screen {
+  display: block;
+  padding: 0;
+}
+.webviews.hub-mode .hub-overlay {
+  width: min(1180px, calc(100% - 48px));
+  max-width: none;
+  min-width: 0;
+  min-height: calc(100vh - 96px);
+  max-height: none;
+  margin: 24px auto;
+  border-radius: 14px;
+}
 .hub-pinned-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -4541,12 +4509,16 @@ html[data-theme='light'] .add-account-btn:hover {
   height: 12px;
 }
 .hub-empty {
-  padding: 16px;
+  width: min(360px, 100%);
+  margin: 12px auto;
+  padding: 18px 20px;
   text-align: center;
-  color: var(--text-3);
+  color: var(--text-2);
   font-size: 12px;
-  border: 1px dashed var(--stroke-soft);
+  line-height: 1.45;
+  border: 1px solid var(--stroke-soft);
   border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--bg-2) 50%, transparent);
 }
 .hub-acct-card {
   /* Flat working row (Law 1: depth = layer). No glass, no blur, no shadow —
@@ -5900,6 +5872,7 @@ html[data-theme='light'] {
   padding-bottom: 20px;
 }
 
+
 /* Строка в визуальном языке хаба (как вкладка «Аккаунты»): цветной аватар
    аккаунта + имя + превью, разделители вместо рамок-боксов, бейдж как
    .hub-acct-badge. */
@@ -6321,21 +6294,25 @@ html[data-theme='light'] { color-scheme: light; }
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  max-width: 420px;
-  padding: 28px 32px;
+  width: min(420px, calc(100% - 40px));
+  box-sizing: border-box;
+  padding: 24px 28px;
   text-align: center;
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius-lg);
+  background: var(--bg-1);
 }
 .signal-card-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
   background: #3A76F0;
   display: grid;
   place-items: center;
-  margin-bottom: 6px;
-  box-shadow: 0 8px 24px -10px rgba(58, 118, 240, 0.6);
+  margin-bottom: 4px;
+  box-shadow: none;
 }
-.signal-card-icon svg { width: 38px; height: 38px; }
+.signal-card-icon svg { width: 28px; height: 28px; }
 .signal-card-title { font-size: 17px; font-weight: 700; color: var(--text-strong); }
 .signal-status-error { color: var(--rose); }
 .signal-status-no_cli { color: var(--warn); }
@@ -6368,7 +6345,7 @@ html[data-theme='light'] { color-scheme: light; }
   width: min(260px, 80%);
   height: 4px;
   margin: 12px auto 0;
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   background: var(--border);
   overflow: hidden;
 }
@@ -7200,20 +7177,6 @@ html[data-theme='light'] .huf-row:hover {
 }
 .split-start-field input:focus { box-shadow: none; }
 
-/* Бриф звонка: моноширинного не нужно, но переносы и абзацы модели важны */
-.call-brief-text {
-  margin: 0;
-  padding: 12px 14px;
-  max-height: 55vh;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.5;
-  user-select: text;
-}
-
 /* ─── Лайт-сборка ───────────────────────────────────────────────────────────
    Класс вешается в state.js по флагу из preload, до первой отрисовки.
    Модули надстроек в лайте не инициализируются (см. core/init.js) — здесь
@@ -7223,8 +7186,6 @@ body.is-lite #open-template-quick,
 body.is-lite #open-schedule-toolbar,
 body.is-lite .schedule-widget,
 body.is-lite #send-voice-msg,
-body.is-lite #call-brief-btn,
-body.no-brief #call-brief-btn,
 body.is-lite #toggle-split,
 body.is-lite .zoom-control,
 body.is-lite #pin-feed,
@@ -7240,4 +7201,201 @@ body.is-lite .toggle-row:has(#setting-crm-hover-enabled),
 body.is-lite .settings-menu-item[data-open="templates"],
 body.is-lite .settings-menu-item[data-open="schedule"] {
   display: none !important;
+}
+
+/* ─── Лайт: компактный список аккаунтов ─────────────────────────────────────
+   Сайдбар — строки с именами вместо плиток 48px (вариант B мокапа
+   mockups/lite-compact-accounts.html), хаб — строка 28px вместо 53px
+   (вариант D). Только лайт: обычная дека остаётся на плитках. */
+body.is-lite #app-root {
+  /* Дефолт для списка; сохранённая ширина приходит инлайном и перебивает.
+     184px — замеренный минимум, при котором имя вида «K8 WP16_Home_4» вместе
+     со счётчиком непрочитанных читается целиком. На 176px уже режет. */
+  --sidebar-width: 184px;
+}
+body.is-lite .sidebar {
+  align-items: stretch;
+  padding: 8px 6px;
+}
+body.is-lite .brand { align-self: center; }
+body.is-lite .accounts-list {
+  align-items: stretch;
+  gap: 1px;
+  padding: 4px 2px;
+}
+
+body.is-lite .account-item {
+  width: auto;
+  height: 32px;
+  min-width: 0;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  overflow: visible;
+}
+body.is-lite .account-item:hover {
+  transform: none;
+  filter: none;
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+}
+body.is-lite .account-item.active {
+  background: var(--bg-2);
+  color: var(--text-strong);
+  box-shadow: none;
+  border-radius: var(--radius-sm);
+}
+body.is-lite .account-item.active::before {
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  height: auto;
+  width: 2px;
+  transform: none;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+/* Круг с глифом бренда внутри: одна фигура вместо «квадрат + бейдж на углу»,
+   на retina 6-пиксельный глиф читался кляксой. Пилюля 26×18 (вариант B мокапа
+   mockups/lite-icon-sizes.html) отъедала лишние 4px горизонтали — в сайдбаре
+   это самый дефицитный ресурс, имена обрезались. */
+body.is-lite .account-swatch {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  order: 1;
+}
+body.is-lite .account-name {
+  order: 2;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  pointer-events: none;
+}
+/* Инициалы и статус-точка не нужны: имя видно, заморозка — снежинкой. */
+body.is-lite .account-label,
+body.is-lite .account-status-dot,
+body.is-lite .account-pin-tag { display: none; }
+
+/* Глиф бренда ложится по центру пилюли — сам бейдж перестаёт быть кружком. */
+body.is-lite .account-type-badge {
+  left: 5px;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  box-shadow: none;
+}
+body.is-lite .account-type-wa,
+body.is-lite .account-type-tg {
+  background: transparent;
+  box-shadow: none;
+}
+body.is-lite .account-type-badge svg { width: 10px; height: 10px; }
+
+body.is-lite .account-frozen-tag {
+  position: static;
+  order: 3;
+  font-size: 10px;
+  color: var(--accent-blue);
+  text-shadow: none;
+}
+/* Счётчик — абсолютом у правого края. В потоке он забирал 26px у КАЖДОЙ строки,
+   а поверх иконки наезжал на первые буквы имени двузначными числами. Теперь
+   ужимается только имя строки, где непрочитанные реально есть. */
+body.is-lite .account-unread {
+  position: absolute;
+  left: auto;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 16px;
+  height: 15px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 9px;
+  line-height: 15px;
+}
+body.is-lite .account-item:has(.account-unread) .account-name {
+  padding-right: 24px;
+}
+/* Тултип у строки не нужен слева-направо — сдвигаем за край сайдбара. */
+body.is-lite .account-tooltip { left: calc(100% + 4px); }
+
+
+/* ── Хаб: строка 28px ── */
+body.is-lite .hub-acct-card {
+  min-height: 0;
+  height: 34px;
+  padding: 0 8px;
+  gap: 8px;
+  border-bottom: 0;
+  border-radius: var(--radius-sm);
+}
+body.is-lite .hub-acct-card--pinned {
+  min-height: 0;
+  height: 34px;
+  padding: 0 8px;
+}
+body.is-lite .hub-acct-av {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  text-shadow: none;
+}
+body.is-lite .hub-acct-av svg { display: block; }
+body.is-lite .hub-acct-status { display: none; }
+/* Теги типа/заморозки дублируют точку и снежинку — третий ряд не нужен. */
+body.is-lite .hub-acct-row3 { display: none; }
+body.is-lite .hub-acct-info { gap: 0; }
+body.is-lite .hub-acct-card.is-frozen { opacity: 0.55; }
+body.is-lite .hub-acct-card.is-frozen .hub-acct-name::after {
+  content: ' ❄';
+  color: var(--accent-blue);
+}
+body.is-lite .hub-acct-badge {
+  min-width: 16px;
+  height: 15px;
+  margin-left: 6px;
+  font-size: 10px;
+}
+body.is-lite .hub-acct-pin-star { top: 50%; transform: translateY(-50%); }
+
+/* «Спокойные плитки» красят .account-item через background-color !important —
+   в списке это заливало всю строку. Нормализуем свотч, строку оставляем чистой. */
+html[data-tile-normalize] body.is-lite .account-item {
+  background-color: transparent !important;
+}
+html[data-tile-normalize] body.is-lite .account-item:hover,
+html[data-tile-normalize] body.is-lite .account-item.active {
+  background-color: var(--bg-2) !important;
+}
+html[data-tile-normalize] body.is-lite .account-item:not(.active):not(.drag-over):not(:focus-visible) {
+  box-shadow: none;
+}
+html[data-tile-normalize] body.is-lite .account-swatch {
+  background-color: color-mix(in oklab, var(--tile, #888) 42%, var(--bg-2)) !important;
+}
+
+/* «Спокойные плитки» в светлой теме дают пастельный фон — белый глиф бренда на
+   нём почти не виден. Без нормализации плитка красится чистым цветом аккаунта,
+   там белый по-прежнему правильный, поэтому правило завязано на оба атрибута. */
+html[data-theme='light'][data-tile-normalize] body.is-lite .account-type-badge svg,
+html[data-theme='light'][data-tile-normalize] body.is-lite .hub-acct-av svg {
+  fill: rgba(0, 0, 0, 0.55);
 }

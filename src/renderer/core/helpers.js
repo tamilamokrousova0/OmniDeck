@@ -243,7 +243,21 @@ function applyTemplateVariables(text, chatName) {
   return out;
 }
 
+/* Подпись кнопки тулбара. Кнопки показывают СВОЮ ::after-подсказку по
+   data-tooltip; нативный title оставлять нельзя — поверх неё через секунду
+   всплывает ещё и системная. Доступность держит aria-label. Любая правка
+   подписи в рантайме должна идти через эту функцию, иначе data-tooltip
+   протухает и всплывает старый текст. */
+function setToolbarLabel(btn, text) {
+  if (!btn) return;
+  const label = String(text || '');
+  btn.dataset.tooltip = label;
+  btn.setAttribute('aria-label', label);
+  btn.removeAttribute('title');
+}
+
 export {
+  setToolbarLabel,
   platformPasteModifier,
   bindPasswordToggle,
   resetPasswordFieldVisibility,

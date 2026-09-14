@@ -59,11 +59,23 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
     } catch { /* quota/serialization — non-fatal */ }
   }
 
+  /* Ключи удалённых аккаунтов в localStorage сами не исчезают: обычный
+     sweep только перезаписывает свои. */
+  function pruneDeletedAccounts() {
+    const liveIds = new Set((state?.accounts || []).map((a) => a.id));
+    let changed = false;
+    for (const accountId of Array.from(_cache.keys())) {
+      if (!liveIds.has(accountId)) { _cache.delete(accountId); changed = true; }
+    }
+    if (changed) saveCacheToStorage();
+  }
+
   function init(ctx) {
     state = ctx.state;
     isWebviewReady = ctx.isWebviewReady;
     safeExecuteInWebview = ctx.safeExecuteInWebview;
     loadCacheFromStorage();
+    pruneDeletedAccounts();
     // Фоновая сборка: списки готовы ДО первого Cmd+K, а не через 5 секунд
     // после него. Первый проход — после прогрузки webview.
     setTimeout(() => { sweep(true).catch(() => {}); }, 60000);
@@ -207,9 +219,16 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
     // Instant sources first (favorites/important carry accountId + name)
     for (const f of state?.important || []) push(f.accountId, f.name, 'imp');
     for (const f of state?.favorites || []) push(f.accountId, f.name, 'fav');
-    for (const [accountId, entry] of _cache) {
-      for (const name of entry.chats) push(accountId, name, 'chat');
+    /* Кэш переживает перезапуск и удаление аккаунта: без этой проверки в
+       выдачу попадали чаты удалённых аккаунтов, а строка показывала
+       технический wa_… вместо имени. Чистим лениво, прямо на выдаче. */
+    const liveIds = new Set((state?.accounts || []).map((a) => a.id));
+    let pruned = false;
+    for (const accountId of Array.from(_cache.keys())) {
+      if (!liveIds.has(accountId)) { _cache.delete(accountId); pruned = true; continue; }
+      for (const name of _cache.get(accountId).chats) push(accountId, name, 'chat');
     }
+    if (pruned) saveCacheToStorage();
     if (q) out.sort((a, b) => (b._score - a._score) || (b._prio - a._prio));
     const results = out.slice(0, 50);
     // Запрос выглядит как номер телефона — добавляем действие «открыть по
@@ -368,5 +387,5 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
     if (_open) close(); else open();
   }
 
-  export const WaDeckGlobalSearch = { init, open, close, toggle, isOpen: () => _open };
+  export const WaDeckGlobalSearch = { init, open, close, toggle, isOpen: () => _open, onAccountRemoved: pruneDeletedAccounts };
   window.WaDeckGlobalSearch = WaDeckGlobalSearch;

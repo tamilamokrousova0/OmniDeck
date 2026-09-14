@@ -1,12 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 const IS_LITE = process.argv.includes('--omnideck-lite');
-const HAS_BRIEF = process.argv.includes('--omnideck-brief');
 
 contextBridge.exposeInMainWorld('waDeck', {
   lite: IS_LITE,
   mac: process.platform === 'darwin',
-  briefAvailable: HAS_BRIEF,
   bootstrap: () => ipcRenderer.invoke('bootstrap'),
   addAccount: (type) => ipcRenderer.invoke('add-account', type),
   removeAccount: (accountId) => ipcRenderer.invoke('remove-account', accountId),
@@ -31,6 +29,7 @@ contextBridge.exposeInMainWorld('waDeck', {
   claimDueScheduled: (payload) => ipcRenderer.invoke('claim-due-scheduled', payload),
   completeScheduled: (payload) => ipcRenderer.invoke('complete-scheduled', payload),
   cancelScheduled: (id) => ipcRenderer.invoke('cancel-scheduled', id),
+  scheduledStatus: (id) => ipcRenderer.invoke('scheduled-status', id),
   sendScheduledNow: (id) => ipcRenderer.invoke('send-scheduled-now', id),
   snoozeScheduled: (payload) => ipcRenderer.invoke('snooze-scheduled', payload),
   getContactLang: (payload) => ipcRenderer.invoke('get-contact-lang', payload),
@@ -73,13 +72,6 @@ contextBridge.exposeInMainWorld('waDeck', {
   installDownloadedUpdate: () => ipcRenderer.invoke('install-downloaded-update'),
   openReleasesPage: () => ipcRenderer.invoke('open-releases-page'),
   translateText: (payload) => ipcRenderer.invoke('translate-text', payload),
-  callBrief: (payload) => ipcRenderer.invoke('call-brief', payload),
-  onCallBriefProgress: (callback) => {
-    if (typeof callback !== 'function') return () => {};
-    const listener = (_event, payload) => callback(payload || {});
-    ipcRenderer.on('call-brief-progress', listener);
-    return () => ipcRenderer.removeListener('call-brief-progress', listener);
-  },
   templateUsed: (payload) => ipcRenderer.invoke('template-used', payload),
   cleanupCache: () => ipcRenderer.invoke('cleanup-cache'),
   onAutoUpdateStatus: (callback) => {
