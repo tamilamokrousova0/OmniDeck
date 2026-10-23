@@ -60,11 +60,6 @@ const state = {
   hubFilter: 'all', // 'all' | 'unread' | 'favorites' | 'important'
 };
 
-/* Лайт-сборка. Флаг приходит из preload синхронно (additionalArguments),
-   поэтому класс на <body> вешается до первой отрисовки — надстройки не
-   успевают мигнуть. Что именно скрыто, смотри в styles.css по `body.is-lite`. */
-const LITE = Boolean(window.waDeck?.lite);
-if (LITE) document.body.classList.add('is-lite');
 if (window.waDeck?.mac) document.body.classList.add('is-mac');
 /* Бриф показываем только когда в сборке есть llama-server. */
 
@@ -208,4 +203,4 @@ const els = {
   crmImpToggle: document.getElementById('crm-imp-toggle'),
 };
 
-export { WADECK_WV_TOKEN, encodeBase64Utf8, state, els, LITE };
+export { WADECK_WV_TOKEN, encodeBase64Utf8, state, els };

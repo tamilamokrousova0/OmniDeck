@@ -1,7 +1,7 @@
 /* Webview lifecycle: creation/cleanup, readiness, safe script execution,
    guest-message dispatch, zoom, hibernation, translator/CRM-hover toggles,
    chat text insertion and voice messages. Extracted verbatim from renderer.js. */
-import { state, els, WADECK_WV_TOKEN, LITE } from './state.js';
+import { state, els, WADECK_WV_TOKEN } from './state.js';
 import {
   setStatus,
   showToast,
@@ -276,11 +276,11 @@ function ensureWebview(account) {
       webview.executeJavaScript(translatorBarScript(WADECK_WV_TOKEN), true)
         .catch((e) => console.warn('[translator-reload]', e));
     }
-    if (isWhatsApp && !LITE && typeof slashTemplatesScript === 'function') {
+    if (isWhatsApp && typeof slashTemplatesScript === 'function') {
       webview.executeJavaScript(slashTemplatesScript(WADECK_WV_TOKEN), true)
         .catch((e) => console.warn('[slash-templates-reload]', e));
     }
-    if (isWhatsApp && !LITE && typeof voiceTranscribeButtonsScript === 'function') {
+    if (isWhatsApp && typeof voiceTranscribeButtonsScript === 'function') {
       webview.executeJavaScript(voiceTranscribeButtonsScript(WADECK_WV_TOKEN), true)
         .catch((e) => console.warn('[voice-buttons-reload]', e));
     }
@@ -355,13 +355,9 @@ function ensureWebview(account) {
         webview.setUserAgent(state.runtime.waUserAgent);
       }
 
-      // Мост-экстрактор текста нужен переводчику, CRM-подсказке и брифу —
-      // в лайте их нет, и лишний скрипт в чужой DOM не лезет.
-      if (!LITE) {
-        webview
-          .executeJavaScript(bridgeScript(WADECK_WV_TOKEN), true)
-          .catch((e) => console.warn('[bridge]', e));
-      }
+      webview
+        .executeJavaScript(bridgeScript(WADECK_WV_TOKEN), true)
+        .catch((e) => console.warn('[bridge]', e));
 
       if (isCrmHoverEnabled() && typeof crmHoverBridgeScript === 'function') {
         webview.executeJavaScript(crmHoverBridgeScript(WADECK_WV_TOKEN), true).catch((e) => console.warn('[crm-hover]', e));
@@ -369,10 +365,10 @@ function ensureWebview(account) {
       if (isTranslatorEnabled() && typeof translatorBarScript === 'function') {
         webview.executeJavaScript(translatorBarScript(WADECK_WV_TOKEN), true).catch((e) => console.warn('[translator]', e));
       }
-      if (!LITE && typeof slashTemplatesScript === 'function') {
+      if (typeof slashTemplatesScript === 'function') {
         webview.executeJavaScript(slashTemplatesScript(WADECK_WV_TOKEN), true).catch((e) => console.warn('[slash-templates]', e));
       }
-      if (!LITE && typeof voiceTranscribeButtonsScript === 'function') {
+      if (typeof voiceTranscribeButtonsScript === 'function') {
         webview.executeJavaScript(voiceTranscribeButtonsScript(WADECK_WV_TOKEN), true).catch((e) => console.warn('[voice-buttons]', e));
       }
     }
@@ -452,7 +448,10 @@ function ensureWebview(account) {
         window.waDeck.getContactLang({ accountId: acc.id, chatName }).then((res) => {
           const lang = (res && res.ok && res.lang) ? String(res.lang).replace(/[^a-z-]/gi, '').slice(0, 10) : '';
           safeExecuteInWebview(webview, `if (window.__waDeckLangCb_${reqId}) window.__waDeckLangCb_${reqId}('${lang}');`);
-        }).catch(() => {});
+        }).catch(() => {
+          // Ответ нужен и при сбое: без него автоопределение языка в чате не включится
+          safeExecuteInWebview(webview, `if (window.__waDeckLangCb_${reqId}) window.__waDeckLangCb_${reqId}('');`);
+        });
         return;
       }
       if (kind === 'SET_LANG') {
@@ -500,13 +499,21 @@ function ensureWebview(account) {
           from: String(payload.from || 'auto'),
           to: String(payload.to || 'ru'),
           batch: true, // автоперевод входящих — батчится в main (если включено)
+          // Пачка собирается только из сообщений одного чата одного аккаунта
+          scope: `${acc?.id || ''}|${String(payload.chatId || '').slice(0, 200)}`,
         }).then(finish).catch(() => finish({ ok: false }));
         return;
       }
       if (kind === 'TRANSLATE') {
         // Кнопка «Перевести»: перевод текста композера с заменой; отправка ручная.
+        if (!isTranslatorEnabled()) return;
         const replaceAll = Boolean(payload.replaceAll);
-        window.waDeck.translateText(payload).then((result) => {
+        const chatId = String(payload.chatId || '');
+        window.waDeck.translateText({
+          text: String(payload.text || ''),
+          from: String(payload.from || 'auto'),
+          to: String(payload.to || 'en'),
+        }).then((result) => {
           if (!(result?.ok && result.translated)) {
             showToast('Перевод не удался — текст не изменён', 'error', 4000);
             console.warn('[translate] failed:', result?.error || 'no_result');
@@ -515,8 +522,10 @@ function ensureWebview(account) {
           const escaped = escapeForJsSingleQuoted(result.translated);
           safeExecuteInWebview(
             webview,
-            `window.__waDeckInsertTranslation('${escaped}', ${replaceAll ? 'true' : 'false'});`
-          );
+            `window.__waDeckInsertTranslation('${escaped}', ${replaceAll ? 'true' : 'false'}, '${escapeForJsSingleQuoted(chatId)}');`
+          ).then((r) => {
+            if (r === 'chat_changed') showToast('Чат сменился — перевод не вставлен', 'info', 3500);
+          });
         }).catch((err) => {
           showToast('Перевод не удался — текст не изменён', 'error', 4000);
           console.warn('[translate] failed:', err?.message || 'exception');

@@ -11,16 +11,6 @@ const os = require('os');
 const { transcribeVoiceAt, transcribeWavBase64, cleanupStaleModels, killWhisper } = require('./voice-transcribe');
 const { initSignal } = require('./signal');
 
-/* Лайт-сборка: та же кодовая база, другой productName в electron-builder.
-   Отличается только тем, ЧТО запускается: надстройки (переводчик, CRM,
-   избранные, важные, ленты, планировщик, шаблоны, поиск, сплит, Signal,
-   расшифровка, бриф) не инициализируются вовсе. В dev включается через
-   OMNIDECK_LITE=1. */
-/* Детекция по пути к исполняемому файлу, а не по app.getName(): в собранном
-   приложении getName() отдаёт `name` из package.json («omnideck»), а не
-   productName из конфига сборки, и лайт запускался как полная дека. */
-const LITE = process.env.OMNIDECK_LITE === '1' || /lite/i.test(process.execPath);
-console.log(`[boot] сборка: ${LITE ? 'LITE (надстройки выключены)' : 'полная'}`);
 
 /*
  * Keep WhatsApp/Telegram webviews online while hidden.
@@ -102,33 +92,35 @@ async function isAttachmentPathAllowed(filePath) {
     const realCmp = caseInsensitive ? real.toLowerCase() : real;
     const homeCmp = caseInsensitive ? home.toLowerCase() : home;
     if (!realCmp.startsWith(homeCmp + path.sep) && realCmp !== homeCmp) return false;
-    const SENSITIVE = [
-      '.ssh', '.gnupg', '.aws', '.docker', '.kube', '.config', '.netrc',
-      '.npmrc', '.gem', '.cargo', 'Library/Keychains',
-    ];
-    for (const s of SENSITIVE) {
-      const marker = (path.sep + s).toLowerCase();
-      const needle = caseInsensitive ? realCmp : real;
-      const needleMarker = caseInsensitive ? marker : (path.sep + s);
-      if (needle.includes(needleMarker + path.sep) || needle.endsWith(needleMarker)) return false;
+    /* Без диалога выбора — только обычные пользовательские папки. Скрытые
+       файлы и каталоги в корне дома (.ssh, .local с ключами Signal, .hermes,
+       *_history) и системные хранилища (Library: сессии мессенджеров в
+       Application Support, Cookies, Messages; AppData на Windows) не уходят
+       даже при XSS в renderer. Файл оттуда можно отправить, выбрав его в
+       диалоге: такие пути проверены выше по _dialogPickedPaths. */
+    const rel = path.relative(home, real);
+    const top = rel.split(path.sep)[0] || '';
+    if (top.startsWith('.')) return false;
+    const topCmp = top.toLowerCase();
+    if (topCmp === 'appdata') return false;
+    if (topCmp === 'library') {
+      // Исключение — облачные папки (iCloud Drive, Dropbox/GDrive/OneDrive)
+      const second = (rel.split(path.sep)[1] || '').toLowerCase();
+      if (second !== 'mobile documents' && second !== 'cloudstorage') return false;
     }
+    if (rel.split(path.sep).some((part) => part.startsWith('.'))) return false;
     return true;
   } catch {
     return false;
   }
 }
 
-const APP_ID = LITE ? 'com.local.wadeck.lite' : 'com.local.wadeck';
-const APP_TITLE = LITE ? 'OmniDeck Lite' : 'OmniDeck';
+const APP_ID = 'com.local.wadeck';
+const APP_TITLE = 'OmniDeck';
 // Ребрендинг WA Deck → OmniDeck (2026-08). Каталог данных ПРИКОЛОЧЕН к
 // историческому имени: смена app.name иначе увела бы userData в
 // ~/Library/Application Support/OmniDeck, и все сессии/стор «пропали» бы.
 // Переезд каталога — только осознанной миграцией, не побочкой ренейма.
-// Лайт делит каталог данных с обычной декой намеренно: аккаунты, сессии и
-// настройки одни на две сборки, перепривязывать по QR не нужно. Сессия при
-// этом ФИЗИЧЕСКИ одна — это не копия, которая разлогинивает оригинал.
-// Обратная сторона: Electron держит блокировку на каталоге, поэтому
-// одновременно работает только одна из сборок, вторая молча не откроется.
 app.setPath('userData', path.join(app.getPath('appData'), 'wa-deck'));
 const FALLBACK_CHROME_VERSION = '146.0.7680.188';
 const APP_ICON_PNG_PATH = path.join(__dirname, '..', 'assets', 'icon', 'omnideck-icon-512.png');
@@ -712,6 +704,35 @@ function quarantineCorruptStoreFile(filePath) {
  * The flag costs one skipped cleanup; the next healthy launch catches up. */
 let storeLoadDegraded = false;
 
+/* Последний рубеж перед пустым стором: самый свежий читаемый дневной снимок
+ * (.snap-YYYYMMDD). Без него при битых primary и .backup список аккаунтов
+ * обнулялся, хотя снимки суточной давности лежали рядом. */
+async function loadLatestStoreSnapshot(primary) {
+  let snaps = [];
+  try {
+    const prefix = `${path.basename(primary)}.snap-`;
+    snaps = fsSync.readdirSync(path.dirname(primary)).filter((f) => f.startsWith(prefix)).sort().reverse();
+  } catch { return null; }
+  for (const name of snaps) {
+    try {
+      const parsed = await loadStoreFromPath(path.join(path.dirname(primary), name));
+      console.warn(`[OmniDeck] Recovered store from snapshot ${name}`);
+      return parsed;
+    } catch { /* следующий, более старый */ }
+  }
+  return null;
+}
+
+/* Стор не прочитан ни из одного файла: пробуем снимки, иначе пустой стор.
+ * В обоих случаях список аккаунтов может быть неполным — чистка партиций
+ * в этом запуске запрещена (на настоящем первом запуске чистить и нечего). */
+async function fallbackStore(primary) {
+  storeLoadDegraded = true;
+  const snap = await loadLatestStoreSnapshot(primary);
+  state.store = sanitizeStore(snap);
+  if (snap) await saveStore().catch(() => {});
+}
+
 async function loadStore() {
   const primary = state.paths.storePath;
   const backup = primary + '.backup';
@@ -730,10 +751,9 @@ async function loadStore() {
         } catch {
           // Keep the broken backup recoverable instead of overwriting it later
           quarantineCorruptStoreFile(backup);
-          storeLoadDegraded = true;
         }
       }
-      state.store = sanitizeStore(null);
+      await fallbackStore(primary);
       return;
     }
 
@@ -756,7 +776,7 @@ async function loadStore() {
         quarantineCorruptStoreFile(backup);
       }
     }
-    state.store = sanitizeStore(null);
+    await fallbackStore(primary);
   }
 }
 
@@ -978,9 +998,7 @@ async function _flushTranslateBatch(key) {
   _trBatchQueues.delete(key);
   if (q.timer) clearTimeout(q.timer);
   const items = q.items;
-  const sep = key.indexOf('|');
-  const from = key.slice(0, sep);
-  const to = key.slice(sep + 1);
+  const { from, to } = q;
 
   if (items.length > 1) {
     try {
@@ -991,7 +1009,10 @@ async function _flushTranslateBatch(key) {
         items.forEach((it, i) => {
           const t = String(parts[i] || '').trim();
           _translateCacheSet(it.cacheKey, t);
-          it.resolve({ ok: Boolean(t), translated: t, detected });
+          // Язык определён по склейке, а не по сообщению: отдаём его одному
+          // элементу, иначе автоопределение языка контакта засчитало бы
+          // одну склейку за N голосов сразу.
+          it.resolve({ ok: Boolean(t), translated: t, detected: i === 0 ? detected : '' });
         });
         return;
       }
@@ -2017,15 +2038,20 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
       webviewTag: true,
-      // Флаг доезжает до preload синхронно: renderer должен знать про лайт
-      // ДО первой отрисовки, иначе надстройки успеют мигнуть на экране.
-      additionalArguments: [
-        ...(LITE ? ['--omnideck-lite'] : []),
-      ],
     },
   });
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  /* Окно деки никуда не уходит со своего index.html. Перетащенный мимо
+     вебвью HTML-файл из чата иначе открывался прямо в нём как file:// и
+     получал через preload весь window.waDeck — переписку всех аккаунтов,
+     отправку файлов. Программные loadFile/reload этих событий не шлют. */
+  const blockMainNavigation = (event, url) => {
+    event.preventDefault();
+    console.warn('[main] blocked main window navigation to', String(url || '').slice(0, 200));
+  };
+  mainWindow.webContents.on('will-navigate', blockMainNavigation);
+  mainWindow.webContents.on('will-redirect', blockMainNavigation);
 
   /* macOS: window-all-closed НЕ завершает приложение, поэтому закрытие окна
      раньше убивало renderer вместе с таймером планировщика и всеми webview —
@@ -2041,14 +2067,11 @@ function createWindow() {
 
   // Орфография в полях самой деки (CRM, шаблоны, планировщик). Webview-поля
   // обслуживает обработчик в setupWebviewGuards — сюда их события не доходят.
-  /* В лайте у самой деки не остаётся полей ввода (CRM, шаблоны, планировщик
-     вырезаны), поэтому словари для её окна не нужны. Проверку орфографии в
-     полях САМИХ мессенджеров это не трогает — они живут в сессиях вебвью. */
-  if (!LITE) configureSpellchecker(mainWindow.webContents.session);
+  configureSpellchecker(mainWindow.webContents.session);
   mainWindow.webContents.on('context-menu', (_event, params) => {
     if (!params?.isEditable) return;
     const template = [];
-    if (!LITE) appendSpellcheckMenuItems(template, mainWindow.webContents, params);
+    appendSpellcheckMenuItems(template, mainWindow.webContents, params);
     template.push(
       { role: 'cut', label: 'Вырезать' },
       { role: 'copy', label: 'Копировать' },
@@ -2813,7 +2836,32 @@ async function downloadMacUpdateZip(asset, version, source) {
     await fs.unlink(zipPath).catch(() => {});
     throw new Error(asset.sha512 ? 'sha512_mismatch' : 'sha512_missing');
   }
+  // Подлинность: sha512 лежит в том же манифесте, что и ссылка на zip, —
+  // подменивший релиз подменил бы оба. Подпись Ed25519 ставит CI
+  // (build/sign-update.js) ключом, которого в релизе нет.
+  let signature = '';
+  try {
+    signature = String(await httpsGetText(`${zipUrl}.sig`) || '').trim();
+  } catch { signature = ''; }
+  if (!verifyMacUpdateSignature(zipName, digest, signature)) {
+    await fs.unlink(zipPath).catch(() => {});
+    throw new Error(signature ? 'signature_invalid' : 'signature_missing');
+  }
   return zipPath;
+}
+
+const UPDATE_SIGNING_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEA7nm54OJWMpf4pkxImf+n7JQolXwdOFdCZ0FMmtbkJlk=
+-----END PUBLIC KEY-----`;
+
+function verifyMacUpdateSignature(zipName, digest, signatureB64) {
+  if (!signatureB64 || !/^[A-Za-z0-9+/=]+$/.test(signatureB64)) return false;
+  try {
+    const message = Buffer.from(`OmniDeck-update\n${zipName}\n${digest}`);
+    return crypto.verify(null, message, UPDATE_SIGNING_PUBLIC_KEY, Buffer.from(signatureB64, 'base64'));
+  } catch {
+    return false;
+  }
 }
 
 async function runMacUpdateCheck(source = 'manual') {
@@ -3017,6 +3065,10 @@ async function installMacDownloadedUpdate() {
     // store, tear the windows down, hand off to the installer, exit.
     _appIsQuitting = true;
     try { await _saveStoreQueue; } catch { /* flushed best-effort */ }
+    // app.exit() минует before-quit: без этого демоны signal-cli (detached)
+    // и whisper переживали выход, а новый демон упирался в lock аккаунта.
+    try { signalService?.stopAll(); } catch { /* best-effort */ }
+    try { killWhisper(); } catch { /* best-effort */ }
 
     for (const win of BrowserWindow.getAllWindows()) {
       win.removeAllListeners('close');
@@ -3046,12 +3098,6 @@ function setupAutoUpdater() {
     });
     return;
   }
-
-  /* Разные каналы: обычная дека читает latest-mac.yml, лайт — lite-mac.yml.
-     Оба файла лежат в одном релизе и друг друга не видят, поэтому лайт не
-     может «обновиться» в полную сборку и наоборот. Канал прописан и в
-     app-update.yml внутри сборки, здесь — страховка на случай ручной правки. */
-  if (LITE) autoUpdater.channel = 'lite';
 
   autoUpdater.autoDownload = true;
   // Require explicit user confirmation before applying updates on quit.
@@ -3182,6 +3228,10 @@ async function deleteTemplate(id) {
   return { ok: true, templates: state.store.templates.map((tpl) => ({ ...tpl })) };
 }
 
+const RISKY_ATTACHMENT_EXT = /\.(app|command|terminal|tool|sh|bash|zsh|csh|ksh|py|pl|rb|jar|pkg|mpkg|dmg|scpt|scptd|applescript|workflow|action|prefpane|webloc|inetloc|fileloc|url|exe|com|bat|cmd|msi|msix|appx|ps1|psm1|vbs|vbe|js|jse|wsf|wsh|hta|scr|pif|cpl|lnk|reg|inf|chm|dll|sys|iso|img|vhd|vhdx)$/i;
+
+const MAIN_WINDOW_URL = pathToFileURL(path.join(__dirname, 'renderer', 'index.html')).href;
+
 function registerIpc() {
   // Sender check on every channel: only the main window's own renderer may
   // invoke our IPC. Any other webContents (e.g. a compromised webview that
@@ -3189,6 +3239,10 @@ function registerIpc() {
   function handle(channel, fn) {
     ipcMain.handle(channel, (event, ...args) => {
       if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
+        return { ok: false, error: 'forbidden' };
+      }
+      // Тот же webContents, но чужой документ (увели навигацией) — тоже отказ.
+      if (String(event.senderFrame?.url || '').split(/[?#]/)[0] !== MAIN_WINDOW_URL) {
         return { ok: false, error: 'forbidden' };
       }
       return fn(event, ...args);
@@ -3514,7 +3568,7 @@ function registerIpc() {
 
   handle('list-scheduled', async (_event, payload) => {
     const accountId = String(payload?.accountId || '').trim();
-    const limit = Math.max(1, Math.min(300, Number(payload?.limit) || 100));
+    const limit = Math.max(1, Math.min(2000, Number(payload?.limit) || 100));
 
     let items = state.store.scheduled;
     if (accountId) {
@@ -3903,28 +3957,40 @@ function registerIpc() {
     // Только файлы из каталога вложений signal-cli — не общий «открой что угодно»
     const resolved = await signalAttachmentPath(filePath);
     if (!resolved) return { ok: false, error: 'forbidden' };
+    /* Файл прислал любой собеседник, а signal-cli карантин не ставит —
+       Gatekeeper молчал бы. Исполняемое не запускаем, а показываем в Finder/
+       Проводнике; остальное помечаем карантином перед открытием. */
+    if (RISKY_ATTACHMENT_EXT.test(resolved)) {
+      shell.showItemInFolder(resolved);
+      return { ok: true, revealed: true };
+    }
+    if (process.platform === 'darwin') {
+      const flag = `0081;${Math.floor(Date.now() / 1000).toString(16)};OmniDeck;`;
+      spawnSync('/usr/bin/xattr', ['-w', 'com.apple.quarantine', flag, resolved], { timeout: 3000 });
+    }
     shell.openPath(resolved).catch(() => {});
     return { ok: true };
   });
   handle('signal-send', async (_event, payload) => {
     if (!signalService) return { ok: false, error: 'not_ready' };
+    // Отправлять можно: файлы из диалога (скрепка) и вложения signal-cli (пересылка).
+    // Неразрешённый путь — ошибка, а не тихий пропуск: иначе сообщение уходило
+    // без файла и выглядело успешным.
+    const rawAttachments = Array.isArray(payload?.attachments) ? payload.attachments.slice(0, 10) : [];
+    const sigDir = path.join(os.homedir(), '.local', 'share', 'signal-cli', 'attachments');
+    const attachments = [];
+    for (const item of rawAttachments) {
+      const pth = path.resolve(String(item?.path || item || ''));
+      if (!pth) continue;
+      if (pth.startsWith(sigDir + path.sep) || await isAttachmentPathAllowed(pth)) attachments.push(pth);
+      else return { ok: false, error: 'path_not_allowed' };
+    }
     return signalService.send(String(payload?.accountId || ''), {
       recipient: String(payload?.recipient || ''),
       groupId: String(payload?.groupId || ''),
       text: clampString(payload?.text, LIMITS.CLIPBOARD_TEXT),
       quote: payload?.quote && typeof payload.quote === 'object' ? payload.quote : undefined,
-      attachments: await (async () => {
-        // Отправлять можно: файлы из диалога (скрепка) и вложения signal-cli (пересылка)
-        const raw = Array.isArray(payload?.attachments) ? payload.attachments : [];
-        const sigDir = path.join(os.homedir(), '.local', 'share', 'signal-cli', 'attachments');
-        const out = [];
-        for (const item of raw.slice(0, 10)) {
-          const pth = path.resolve(String(item?.path || item || ''));
-          if (!pth) continue;
-          if (pth.startsWith(sigDir + path.sep) || await isAttachmentPathAllowed(pth)) out.push(pth);
-        }
-        return out;
-      })(),
+      attachments,
     });
   });
   handle('signal-react', async (_event, payload) => {
@@ -4054,10 +4120,14 @@ function registerIpc() {
       && text.length <= 1500;
     if (batchOk) {
       return await new Promise((resolve) => {
-        const key = `${from}|${to}`;
+        // Сообщения разных чатов/аккаунтов в одну склейку не попадают: Google
+        // определяет один язык на весь текст, и куски на другом языке
+        // возвращались непереведёнными.
+        const scope = String(payload?.scope || '').slice(0, 300);
+        const key = `${from}|${to}|${scope}`;
         let q = _trBatchQueues.get(key);
         if (!q) {
-          q = { items: [], chars: 0, timer: null };
+          q = { items: [], chars: 0, timer: null, from, to };
           q.timer = setTimeout(() => { _flushTranslateBatch(key).catch(() => {}); }, TRANSLATE_BATCH_WAIT_MS);
           _trBatchQueues.set(key, q);
         }
@@ -4178,6 +4248,20 @@ let _suspendStartedAt = null;
  * we only touch partitions whose name encodes an account id we no longer
  * have, and we never touch the active app's userData root.
  */
+const PARTITIONS_TRASH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+async function purgePartitionsTrash(trashDir) {
+  let entries = [];
+  try { entries = await fs.readdir(trashDir); } catch { return; }
+  for (const entry of entries) {
+    const ts = Number(String(entry).split('--').pop());
+    if (!Number.isFinite(ts) || Date.now() - ts < PARTITIONS_TRASH_TTL_MS) continue;
+    try { await rmWithRetry(path.join(trashDir, entry)); } catch (err) {
+      console.warn('[orphan-cleanup] trash purge failed', entry, err?.message || err);
+    }
+  }
+}
+
 async function cleanupOrphanPartitions() {
   if (!state.paths.userData) return;
   if (storeLoadDegraded) {
@@ -4185,6 +4269,8 @@ async function cleanupOrphanPartitions() {
     return;
   }
   const partitionsDir = path.join(state.paths.userData, 'Partitions');
+  const trashDir = path.join(state.paths.userData, 'Partitions-trash');
+  await purgePartitionsTrash(trashDir);
   let entries = [];
   try {
     entries = await fs.readdir(partitionsDir);
@@ -4214,7 +4300,18 @@ async function cleanupOrphanPartitions() {
           const size = await dirSizeBytes(full);
           totalBytes += size;
         } catch { /* ignore */ }
-        await rmWithRetry(full);
+        /* Не удаляем, а убираем в корзину на 30 дней: если список аккаунтов
+           потерялся (стор сброшен в прошлом запуске), сессии ещё можно
+           вернуть, переложив папку обратно в Partitions. */
+        await fs.mkdir(trashDir, { recursive: true });
+        const dest = path.join(trashDir, `${entry}--${Date.now()}`);
+        // Windows: Chromium/AV держат файлы партиции после закрытия — ретраим
+        for (let attempt = 0; ; attempt++) {
+          try { await fs.rename(full, dest); break; } catch (err) {
+            if (attempt >= 4 || !['EBUSY', 'EPERM', 'EACCES'].includes(err?.code)) throw err;
+            await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+          }
+        }
         removed++;
       }
     } catch (err) {
@@ -4222,7 +4319,7 @@ async function cleanupOrphanPartitions() {
     }
   }
   if (removed > 0) {
-    console.log(`[orphan-cleanup] removed ${removed} orphaned partition(s), reclaimed ~${Math.round(totalBytes / 1024 / 1024)} MB`);
+    console.log(`[orphan-cleanup] moved ${removed} orphaned partition(s) to Partitions-trash, ~${Math.round(totalBytes / 1024 / 1024)} MB`);
   }
 }
 
@@ -4328,7 +4425,7 @@ async function bootstrap() {
     _dialogPickedPaths.add(String(rp));
   }
   setupWebviewGuards();
-  signalService = LITE ? null : initSignal({
+  signalService = initSignal({
     getMainWindow: () => mainWindow,
     getAccounts: () => state.store.accounts,
     saveStore,

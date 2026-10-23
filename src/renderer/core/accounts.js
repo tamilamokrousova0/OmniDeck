@@ -1,7 +1,7 @@
 /* Accounts: sidebar rendering, active-account switching, add/remove,
    drag reorder, context menus and refresh actions.
    Extracted verbatim from renderer.js. */
-import { state, els , LITE } from './state.js';
+import { state, els } from './state.js';
 import { setStatus, showConfirm, setToolbarLabel } from './helpers.js';
 import {
   ensureWebview,
@@ -172,12 +172,7 @@ function updateAccountCardStatus(accountId) {
 function renderAccounts() {
   const fragment = document.createDocumentFragment();
 
-  /* Профиль общий с обычной декой, поэтому в сторе могут лежать Signal-аккаунты.
-     В лайте клиента Signal нет — не показываем их вовсе, но и не трогаем:
-     вернёшься в обычную сборку, они на месте. */
-  const visible = LITE ? state.accounts.filter((a) => a.type !== 'signal') : state.accounts;
-
-  for (const account of visible) {
+  for (const account of state.accounts) {
     const card = document.createElement('div');
     const hibernatedCls = (state._hibernated && state._hibernated.has(account.id)) ? 'is-hibernated' : '';
     card.className = `account-item ${state.activeAccountId === account.id ? 'active' : ''} ${account.frozen ? 'frozen' : ''} ${hibernatedCls}`.trim();
@@ -226,11 +221,7 @@ function renderAccounts() {
     // Lovable-style: whole card is colored, icon/initials inside.
     // --tile carries the raw user color so the opt-in "calm tiles" CSS
     // (html[data-tile-normalize]) can re-blend it without losing the hue.
-    /* В лайте сайдбар — список строк с именами (mockups/lite-compact-accounts.html):
-       цвет и иконка живут в свотче слева, а не заливают всю строку. */
-    const swatch = LITE ? document.createElement('span') : null;
-    if (swatch) swatch.className = 'account-swatch';
-    const painted = swatch || card;
+    const painted = card;
     painted.style.background = account.color;
     card.style.setProperty('--tile', account.color || '#8a93a6');
     if (account.iconUrl) {
@@ -243,13 +234,6 @@ function renderAccounts() {
     label.className = 'account-label';
     label.textContent = account.name.slice(0, 2).toUpperCase();
     if (account.iconUrl) label.style.opacity = '0'; // hide text when icon set
-
-    // Имя целиком — в лайте оно заменяет двухбуквенные инициалы.
-    const nameEl = LITE ? document.createElement('span') : null;
-    if (nameEl) {
-      nameEl.className = 'account-name';
-      nameEl.textContent = account.name;
-    }
 
     card.addEventListener('dblclick', (event) => {
       event.preventDefault();
@@ -335,8 +319,7 @@ function renderAccounts() {
       showAccountContextMenu(e, account);
     });
 
-    if (swatch) card.append(swatch, nameEl);
-    else card.append(label);
+    card.append(label);
     fragment.appendChild(card);
   }
 

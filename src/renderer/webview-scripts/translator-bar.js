@@ -1,7 +1,12 @@
 function translatorBarScript(token) {
   const tokenJs = JSON.stringify(typeof token === 'string' ? token : '');
   return `(() => {
-    if (window.__waDeckTranslatorBound) return true;
+    if (window.__waDeckTranslatorBound) {
+      // Повторный инжект после включения переводчика: цикл, остановленный
+      // выключателем, поднимаем заново (второй IIFE не запускаем).
+      try { if (typeof window.__waDeckTranslatorResume === 'function') window.__waDeckTranslatorResume(); } catch (e) {}
+      return true;
+    }
     window.__waDeckTranslatorBound = true;
 
     /* Host-issued token kept in the closure (never on window) */
@@ -74,6 +79,7 @@ function translatorBarScript(token) {
       { code: 'en', label: 'Английский' },
       { code: 'de', label: 'Немецкий' },
       { code: 'fr', label: 'Французский' },
+      { code: 'es', label: 'Испанский' },
       { code: 'nl', label: 'Нидерландский' },
       { code: 'it', label: 'Итальянский' },
       { code: 'no', label: 'Норвежский' },
@@ -93,14 +99,21 @@ function translatorBarScript(token) {
     // ответа переводчика. Копим по чату; 2 совпадения подряд при ОТСУТСТВИИ
     // сохранённого языка — выставляем направление исходящих и персистим.
     let contactLangKnown = false;      // у чата есть явно сохранённый язык
+    // Ответ GET_LANG для текущего чата уже пришёл. До него сохранённый язык
+    // неизвестен, и автоопределение могло бы перезаписать его своим.
+    let langLoaded = false;
     let langGuess = { chat: '', counts: {} };
 
-    function noteDetectedLang(det) {
-      const code = String(det || '').toLowerCase().slice(0, 5);
+    function noteDetectedLang(det, reqChat) {
+      const code = String(det || '').toLowerCase().split(/[-_]/)[0];
       if (!code || code === 'ru' || code === INCOMING_TARGET) return;
       if (!TARGET_LANGS.some((l) => l.code === code)) return;
       const chat = currentChatId;
-      if (!chat || chat === '__unknown_chat__' || contactLangKnown) return;
+      // Ответ пришёл после смены чата — язык принадлежит прошлому собеседнику.
+      if (reqChat !== chat) return;
+      // В фоне чат мог смениться без нашего тика (планировщик) — не угадываем.
+      if (window.__waDeckWebviewActive === false) return;
+      if (!chat || chat === '__unknown_chat__' || contactLangKnown || !langLoaded) return;
       if (langGuess.chat !== chat) langGuess = { chat: chat, counts: {} };
       langGuess.counts[code] = (langGuess.counts[code] || 0) + 1;
       if (langGuess.counts[code] >= 2 && outgoingTo !== code) {
@@ -529,7 +542,7 @@ function translatorBarScript(token) {
           && composer.contains(sel.anchorNode) && composer.contains(sel.focusNode)) {
         const part = sel.toString().trim();
         if (part) {
-          __waDeckEmit('TRANSLATE', JSON.stringify({ text: part, from: outgoingFrom, to: outgoingTo, replaceAll: false }));
+          __waDeckEmit('TRANSLATE', JSON.stringify({ text: part, from: outgoingFrom, to: outgoingTo, replaceAll: false, chatId: getChatId() }));
           return;
         }
       }
@@ -542,11 +555,17 @@ function translatorBarScript(token) {
         pendingPrefix = lastInserted + glue;
         body = tail;
       }
-      __waDeckEmit('TRANSLATE', JSON.stringify({ text: body, from: outgoingFrom, to: outgoingTo, replaceAll: true }));
+      __waDeckEmit('TRANSLATE', JSON.stringify({ text: body, from: outgoingFrom, to: outgoingTo, replaceAll: true, chatId: getChatId() }));
     }
 
-    window.__waDeckInsertTranslation = function (translated, replaceAll) {
+    window.__waDeckInsertTranslation = function (translated, replaceAll, chatId) {
       if (!translated) return false;
+      // Пока шёл перевод, оператор открыл другой чат: вставка затёрла бы его
+      // черновик текстом для прошлого собеседника.
+      if (chatId && getChatId() !== chatId) {
+        pendingPrefix = '';
+        return 'chat_changed';
+      }
       const composer = getComposer();
       if (!composer) {
         emitHealth({ script: 'translator-bar', ok: false, detail: 'insert_no_composer' });
@@ -888,7 +907,7 @@ function translatorBarScript(token) {
         try { onResult(result); } catch {}
         try { delete window[cbName]; } catch {}
       };
-      const payload = JSON.stringify({ reqId: reqId, text: text, from: from, to: to });
+      const payload = JSON.stringify({ reqId: reqId, text: text, from: from, to: to, chatId: currentChatId });
       __waDeckEmit('TRANSLATE_MSG', payload);
     }
 
@@ -913,8 +932,14 @@ function translatorBarScript(token) {
         // drop the response if the user already moved to another chat, or
         // B would inherit (and on next save persist) A's target language.
         if (currentChatId === chatId) {
-          contactLangKnown = Boolean(String(lang || '').trim());
-          try { applyOutgoingTo(String(lang || '')); } catch {}
+          const code = String(lang || '').trim();
+          langLoaded = true;
+          // Пока шёл ответ, язык выбрали вручную — не перетираем его
+          if (contactLangKnown) { try { delete window[cbName]; } catch {} return; }
+          contactLangKnown = TARGET_LANGS.some((l) => l.code === code);
+          // Языка нет — дефолт, а не язык прошлого чата: иначе испанский
+          // от предыдущего собеседника уходил бы следующему.
+          try { applyOutgoingTo(contactLangKnown ? code : 'en'); } catch {}
         }
         try { delete window[cbName]; } catch {}
       };
@@ -966,6 +991,7 @@ function translatorBarScript(token) {
       }
       const prevAttempts = entry && entry.state === 'failed' ? (entry.attempts || 0) : 0;
       translatedCache.set(row, { state: 'pending', attempts: prevAttempts });
+      const reqChat = currentChatId;
       requestMessageTranslate(text, 'auto', INCOMING_TARGET, (result) => {
         if (!result || !result.ok || !result.translated) {
           if (row.isConnected) translatedCache.set(row, { state: 'failed', failedAt: Date.now(), attempts: prevAttempts + 1 });
@@ -976,7 +1002,7 @@ function translatorBarScript(token) {
         textCacheSet(cacheKey, result.translated);
         // Язык контакта угадываем только по ВХОДЯЩИМ: свои сообщения на
         // языке контакта удвоили бы счётчик, а на русском — сбили бы его.
-        if (dir === 'in') { try { noteDetectedLang(result.detected); } catch {} }
+        if (dir === 'in') { try { noteDetectedLang(result.detected, reqChat); } catch {} }
         if (!row.isConnected) return;
         // Сообщение уже на русском (своё, не переведённое) — плашка-дубль не нужна
         if (normWsC(result.translated) === normWsC(text)) {
@@ -1157,6 +1183,7 @@ function translatorBarScript(token) {
         currentChatId = next;
         barHiddenByUser = false;
         contactLangKnown = false;
+        langLoaded = false;
         langGuess = { chat: next, counts: {} };
         // Clear translation cache and overlays when switching chats
         translatedCache = new WeakMap();
@@ -1219,16 +1246,29 @@ function translatorBarScript(token) {
           bar = null;
           currentChatId = '';
         } catch {}
-        setTimeout(loopTick, 2000);
+        // Цикл засыпает целиком: включение переинжектит скрипт, и guard
+        // __waDeckTranslatorBound поднимет его через __waDeckTranslatorResume.
+        loopRunning = false;
         return;
       }
-      try { tick(); } catch (e) { console.warn('[WA-Deck translator] tick error:', e); }
+      const active = window.__waDeckWebviewActive !== false;
+      // Фоновый webview: бар никто не видит, входящие ловит MutationObserver —
+      // DOM-опрос и свип только жгли CPU. Открытое меню языков — исключение.
+      if (active || dropdownOpen) {
+        try { tick(); } catch (e) { console.warn('[WA-Deck translator] tick error:', e); }
+      }
       // Idle-backoff: неактивный (фоновый) webview тикает реже — новые входящие
       // ловит MutationObserver в реальном времени, loop лишь поддерживает бар и
       // подчищает. Дефолт (флаг не выставлен) = активный режим 1с (безопасно).
-      const active = window.__waDeckWebviewActive !== false;
       setTimeout(loopTick, active ? 1000 : 3000);
     }
+
+    let loopRunning = true;
+    window.__waDeckTranslatorResume = function () {
+      if (loopRunning) return;
+      loopRunning = true;
+      loopTick();
+    };
 
     // Init
     loopTick();

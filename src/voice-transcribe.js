@@ -19,12 +19,19 @@ const fs = require('fs/promises');
 const fsSync = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 
 /* small-q5_1 на всех платформах: быстрая даже на слабом CPU (большие модели
    на Windows не успевали до таймаута), качества хватает (решение юзера после
    живых тестов; серверная расшифровка выпилена как лишняя сложность). */
 const MODEL_FILE = 'ggml-small-q5_1.bin';
-const MODEL_URL = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${MODEL_FILE}`;
+/* URL прибит к коммиту репозитория (resolve/main — изменяемая ветка), а файл
+   сверяется по sha256: модель разбирает нативный whisper-cli, подменённый
+   файл — это вход в C++-парсер. Значения из API HuggingFace (paths-info,
+   lfs.oid) на коммит 5359861, сверены с локально скачанной моделью. */
+const MODEL_REVISION = '5359861c739e955e79d9a303bcbc70fb988958b1';
+const MODEL_URL = `https://huggingface.co/ggerganov/whisper.cpp/resolve/${MODEL_REVISION}/${MODEL_FILE}`;
+const MODEL_SHA256 = 'ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb';
 const MODEL_MIN_BYTES = 150 * 1024 * 1024; // недокачанный файл не считаем моделью
 const MODEL_IDLE_TIMEOUT_MS = 90000; // простой канала при скачивании модели
 const MODEL_HUMAN_SIZE = '~190 МБ';
@@ -408,6 +415,9 @@ function voiceCaptureScript(voiceId, kind) {
           || hooked.el
           || document.querySelector('video');
         if (!el) { dctx.close().catch(() => {}); return { ok: false, error: 'video_gone' }; }
+        let rec = null;
+        let node = null;
+        let tap = null;
         try {
           /* Долгоживущий контекст + WeakMap узлов: createMediaElementSource
              можно вызвать на элементе лишь ОДИН раз (повтор — InvalidStateError),
@@ -418,14 +428,33 @@ function voiceCaptureScript(voiceId, kind) {
               nodes: new WeakMap(),
             };
           }
-          const tap = window.__waDeckTap;
+          tap = window.__waDeckTap;
           if (tap.ctx.state === 'suspended') { try { await tap.ctx.resume(); } catch (_) {} }
-          let node = tap.nodes.get(el);
-          if (!node) { node = tap.ctx.createMediaElementSource(el); tap.nodes.set(el, node); }
+          node = tap.nodes.get(el);
+          if (!node) {
+            node = tap.ctx.createMediaElementSource(el);
+            tap.nodes.set(el, node);
+            /* Звук элемента теперь идёт через этот контекст: он должен работать,
+               пока видео играет, и спать в остальное время — иначе живой
+               аудиопоток и открытое аудиоустройство держались до перезагрузки
+               вкладки (постоянный CPU и энергия). */
+            const ctx = tap.ctx;
+            el.addEventListener('play', () => { ctx.resume().catch(() => {}); });
+            // Контекст общий на вкладку: пауза одного видео не должна глушить
+            // другое, которое ещё играет через него же.
+            const sleep = () => {
+              if (window.__waDeckTapBusy) return;
+              if (Array.from(document.querySelectorAll('video,audio')).some((m) => !m.paused && !m.ended)) return;
+              ctx.suspend().catch(() => {});
+            };
+            el.addEventListener('pause', sleep);
+            el.addEventListener('ended', sleep);
+          }
+          window.__waDeckTapBusy = true;
           const dest = tap.ctx.createMediaStreamDestination();
           try { node.disconnect(); } catch (_) {}
           node.connect(dest); // НЕ в destination — иначе звук в колонки
-          const rec = new MediaRecorder(dest.stream);
+          rec = new MediaRecorder(dest.stream);
           const parts = [];
           rec.ondataavailable = (e) => { if (e.data && e.data.size) parts.push(e.data); };
           const stopped = new Promise((r) => { rec.onstop = r; });
@@ -453,10 +482,18 @@ function voiceCaptureScript(voiceId, kind) {
           /* Возвращаем звук элемента в колонки: иначе после расшифровки
              это видео проигрывалось бы немым */
           try { node.disconnect(); node.connect(tap.ctx.destination); } catch (_) {}
+          window.__waDeckTapBusy = false;
+          tap.ctx.suspend().catch(() => {});
           const blob = new Blob(parts);
           const buf2 = await blob.arrayBuffer();
           if (buf2.byteLength > 0) decoded = await dctx.decodeAudioData(buf2.slice(0));
         } catch (recErr) {
+          /* Сбой посреди записи: иначе MediaRecorder продолжал писать, а видео
+             оставалось подключённым к рекордеру и играло немым до перезагрузки */
+          try { if (rec && rec.state !== 'inactive') rec.stop(); } catch (_) {}
+          try { if (node && tap) { node.disconnect(); node.connect(tap.ctx.destination); } } catch (_) {}
+          window.__waDeckTapBusy = false;
+          try { if (tap && el.paused) tap.ctx.suspend().catch(() => {}); } catch (_) {}
           dctx.close().catch(() => {});
           return { ok: false, error: 'audio_decode_failed', detail: String(recErr && recErr.message || recErr) };
         }
@@ -587,6 +624,7 @@ async function downloadModel(contents, voiceId, onProgress) {
     if (!resp.ok) { clearTimeout(idleTimer); throw new Error(`model download HTTP ${resp.status}`); }
     const total = Number(resp.headers.get('content-length')) || 0;
     const fh = await fs.open(tmp, 'w');
+    const hash = crypto.createHash('sha256');
     let received = 0;
     let lastShown = -10;
     try {
@@ -595,6 +633,7 @@ async function downloadModel(contents, voiceId, onProgress) {
         const { done, value } = await reader.read();
         if (done) break;
         await fh.write(value);
+        hash.update(value);
         received += value.length;
         armIdle();
         const pct = total ? Math.floor((received / total) * 100) : 0;
@@ -611,6 +650,10 @@ async function downloadModel(contents, voiceId, onProgress) {
     if (received < MODEL_MIN_BYTES) {
       await fs.unlink(tmp).catch(() => {});
       throw new Error('model download truncated');
+    }
+    if (hash.digest('hex') !== MODEL_SHA256) {
+      await fs.unlink(tmp).catch(() => {});
+      throw new Error('model checksum mismatch');
     }
     await fs.rename(tmp, dest);
   })().finally(() => { _modelDownloadPromise = null; });

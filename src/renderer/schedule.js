@@ -541,16 +541,23 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
     if (state._editingScheduleId) {
       const editingId = state._editingScheduleId;
       cancelScheduleEditMode();
-      let original = null;
-      try {
-        const list = await window.waDeck.listScheduled({ limit: 2000 });
-        original = (Array.isArray(list?.items) ? list.items : [])
-          .find((row) => String(row.id) === String(editingId)) || null;
-      } catch { /* treat as unknown — do not cancel blindly */ }
-      if (original && (original.status === 'pending' || original.status === 'snoozed')) {
-        await window.waDeck.cancelScheduled(editingId).catch(() => {});
-      } else if (typeof showToast === 'function') {
-        showToast('Оригинал уже отправлен — сохранено как новое задание', 'warn');
+      /* Отменяем напрямую: main сам пускает отмену только для pending/
+         processing/failed. Раньше оригинал искали в listScheduled, а main
+         режет выдачу до 300 — при большом расписании он «не находился» и
+         уходил вместе с новым. failed тоже отменяем: иначе «Отправить сейчас»
+         у него дал бы второе сообщение. */
+      /* processing не отменяем: исполнитель мог уже нажать Enter, и отмена
+         лишь спрятала бы отправленный оригинал под статусом «отменён». */
+      const st = await window.waDeck.scheduledStatus(editingId).catch(() => null);
+      const res = st?.status === 'processing'
+        ? null
+        : await window.waDeck.cancelScheduled(editingId).catch(() => null);
+      if (!res?.ok && typeof showToast === 'function') {
+        showToast(st?.status === 'sent'
+          ? 'Оригинал уже отправлен — сохранено как новое задание'
+          : (st?.status === 'processing'
+            ? 'Оригинал уже отправляется — проверьте список, чтобы не ушло дважды'
+            : 'Не удалось отменить оригинал — проверьте список, чтобы не ушло дважды'), 'warn');
       }
     }
 
@@ -693,6 +700,29 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
     // Поиск по номеру: в шапке стоит имя контакта, номера в ней нет.
     if (opts.allowAnyTitle) return { ok: true, title: head.title, unverified: true };
     return { ok: false, error: 'chat_title_mismatch', title: head.title };
+  }
+
+  /* Один «водитель» на webview за раз. Отправка по расписанию, прыжок в чат
+     (избранные/важные/лента/Cmd+K) и фоновый сбор списка чатов глобального
+     поиска кликают и крутят один и тот же #pane-side: сборщик раз в 15 мин
+     ~5 с угонял скролл, клик планировщика попадал в соседнюю строку —
+     открывался и помечался прочитанным чужой чат. Очередь на промисах:
+     следующий ждёт хвост предыдущего, ошибка не рвёт цепочку. */
+  const _webviewLocks = new WeakMap(); // webview → Promise (хвост очереди)
+  function withWebviewLock(webview, fn) {
+    if (!webview) return fn();
+    const prev = _webviewLocks.get(webview) || Promise.resolve();
+    const run = prev.then(() => fn());
+    /* Хвост очереди ограничен по времени: зависший executeJavaScript (reload
+       или крэш гостя посреди скрипта) иначе навсегда запирал аккаунт —
+       вставали отправки по расписанию и прыжки в чаты. */
+    const tail = Promise.race([run, delay(180000)]).catch(() => {});
+    _webviewLocks.set(webview, tail);
+    tail.then(() => { if (_webviewLocks.get(webview) === tail) _webviewLocks.delete(webview); });
+    return run;
+  }
+  function isWebviewLocked(webview) {
+    return Boolean(webview && _webviewLocks.has(webview));
   }
 
   async function openChatInWebview(webview, chatNameRaw, opts = {}) {
@@ -1402,7 +1432,17 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
           continue;
         }
 
-        const result = await runScheduledSend(webview, item);
+        /* Исключение посреди отправки (например, отклонённый IPC вложений)
+           обрывало весь цикл: остальные захваченные задания пачки висели в
+           processing до STALE_PROCESSING_MS (20 мин) и потом повторялись. */
+        let result;
+        try {
+          result = await withWebviewLock(webview, () => runScheduledSend(webview, item));
+        } catch (e) {
+          console.warn('[scheduled] exception:', item.chatName, e);
+          await reportScheduledResult(item, false, 'exception').catch(() => {});
+          continue;
+        }
         console.log('[scheduled] result:', item.chatName, JSON.stringify(result));
 
         if (result?.canceled) {
@@ -1497,7 +1537,12 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
     clearAttachments,
     createScheduledMessage,
     startScheduleRunner,
-    openChatInWebview,
-    openChatByListClick,
+    // Снаружи — только через блокировку webview (см. withWebviewLock).
+    openChatInWebview: (webview, chatName, opts) =>
+      withWebviewLock(webview, () => openChatInWebview(webview, chatName, opts)),
+    openChatByListClick: (webview, chatName) =>
+      withWebviewLock(webview, () => openChatByListClick(webview, chatName)),
+    withWebviewLock,
+    isWebviewLocked,
   };
   window.WaDeckScheduleModule = WaDeckScheduleModule;

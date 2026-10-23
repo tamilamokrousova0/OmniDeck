@@ -1,6 +1,6 @@
 /* Bootstrap: global error handlers, the init() sequence and startup kick-off.
    Extracted verbatim from renderer.js. */
-import { state, els, LITE } from './state.js';
+import { state, els } from './state.js';
 import {
   setStatus,
   showToast,
@@ -73,7 +73,6 @@ async function init() {
         console.warn('[layout] Corrupted sidebar width detected, resetting to default');
         appRoot.style.removeProperty('--sidebar-width');
         localStorage.removeItem('sidebarWidth');
-        localStorage.removeItem('sidebarWidthLite');
       }
     }
   }
@@ -94,27 +93,15 @@ async function init() {
   WaDeckAutoUpdateModule.init(moduleCtx);
   WaDeckUnreadModule.init({ ...moduleCtx, renderAccounts, isWebviewReady, safeExecuteInWebview, updateHubDashboard });
 
-  if (LITE) {
-    /* Надстройки в лайте не инициализируем и снимаем их глобальные ссылки.
-       Внешние вызовы к ним идут через `window.WaDeckX?.метод?.()` — без
-       глобала они молча становятся пустышками, и городить проверки в
-       вызывающем коде не нужно. */
-    for (const name of ['WaDeckGlobalSearch', 'WaDeckFavoritesModule', 'WaDeckImportantModule',
-      'WaDeckUnreadFeed', 'WaDeckPinFeed', 'WaDeckSplitModule', 'WaDeckSignalPanel',
-      'WaDeckCrmModule']) {
-      try { delete window[name]; } catch { window[name] = undefined; }
-    }
-  } else {
-    window.WaDeckGlobalSearch?.init?.({ ...moduleCtx, isWebviewReady, safeExecuteInWebview });
-    WaDeckCrmModule.init({ ...moduleCtx, activeAccount, selectedWebview });
-    WaDeckFavoritesModule.init({ ...moduleCtx, setActiveAccount, isWebviewReady, safeExecuteInWebview });
-    WaDeckImportantModule.init({ ...moduleCtx, setActiveAccount, isWebviewReady, safeExecuteInWebview });
-    window.WaDeckUnreadFeed?.init?.({ ...moduleCtx, setActiveAccount, isWebviewReady, safeExecuteInWebview });
-    WaDeckScheduleModule.init({ ...moduleCtx, trimMapSize, runWithBusyButton, accountById, ensureWebview, isWebviewReady, sendWebviewInput, delay, formatDateTime, nextSendAtLocal, showConfirm, applyTemplateVariables });
-    window.WaDeckSplitModule?.init?.(moduleCtx);
-    window.WaDeckSignalPanel?.init?.({ ...moduleCtx, setActiveAccount });
-    document.getElementById('toggle-split')?.addEventListener('click', () => window.WaDeckSplitModule?.toggle?.());
-  }
+  window.WaDeckGlobalSearch?.init?.({ ...moduleCtx, isWebviewReady, safeExecuteInWebview });
+  WaDeckCrmModule.init({ ...moduleCtx, activeAccount, selectedWebview });
+  WaDeckFavoritesModule.init({ ...moduleCtx, setActiveAccount, isWebviewReady, safeExecuteInWebview });
+  WaDeckImportantModule.init({ ...moduleCtx, setActiveAccount, isWebviewReady, safeExecuteInWebview });
+  window.WaDeckUnreadFeed?.init?.({ ...moduleCtx, setActiveAccount, isWebviewReady, safeExecuteInWebview });
+  WaDeckScheduleModule.init({ ...moduleCtx, trimMapSize, runWithBusyButton, accountById, ensureWebview, isWebviewReady, sendWebviewInput, delay, formatDateTime, nextSendAtLocal, showConfirm, applyTemplateVariables });
+  window.WaDeckSplitModule?.init?.(moduleCtx);
+  window.WaDeckSignalPanel?.init?.({ ...moduleCtx, setActiveAccount });
+  document.getElementById('toggle-split')?.addEventListener('click', () => window.WaDeckSplitModule?.toggle?.());
   if (typeof window.waDeck.onAutoUpdateStatus === 'function' && !state.autoUpdateUnsubscribe) {
     state.autoUpdateUnsubscribe = window.waDeck.onAutoUpdateStatus((payload) => {
       WaDeckAutoUpdateModule.handleAutoUpdateStatus(payload);
@@ -349,19 +336,14 @@ async function init() {
   setActiveAccount('');
   updatePanelVisibility();
   applySettingsToForm({ renderWeather: true });
-  /* Стартовая подготовка форм надстроек. В лайте их модули не подняты, и
-     первый же такой вызов ронял init ДО bindActions() — внешне это выглядело
-     как «кнопки не работают» плюс «Ошибка запуска» в статусной строке. */
-  if (!LITE) {
-    WaDeckScheduleModule.renderAttachmentsDraft();
-    WaDeckScheduleModule.renderScheduleTarget();
-    els.crmContactName.value = '';
-    els.crmAbout.value = '';
-    els.crmMyInfo.value = '';
-    els.crmMeta.textContent = 'Файл: —';
-    WaDeckCrmModule.setCrmEditable(false);
-  }
-  if (!LITE && window.WaDeckTemplatesModule?.createTemplateController) {
+  WaDeckScheduleModule.renderAttachmentsDraft();
+  WaDeckScheduleModule.renderScheduleTarget();
+  els.crmContactName.value = '';
+  els.crmAbout.value = '';
+  els.crmMyInfo.value = '';
+  els.crmMeta.textContent = 'Файл: —';
+  WaDeckCrmModule.setCrmEditable(false);
+  if (window.WaDeckTemplatesModule?.createTemplateController) {
     templateController = window.WaDeckTemplatesModule.createTemplateController({
       state,
       els,
@@ -377,7 +359,7 @@ async function init() {
     await templateController.init(state.templates);
   }
 
-  if (!LITE) els.scheduleAt.value = nextSendAtLocal(1);
+  els.scheduleAt.value = nextSendAtLocal(1);
   /* renderScheduled() already called via setActiveAccount → _setActiveAccountInner */
 
   bindActions();
@@ -385,11 +367,9 @@ async function init() {
   WaDeckWeatherModule.refreshWeather().catch((e) => console.warn('[weather]', e));
   WaDeckUnreadModule.startUnreadPolling();
   WaDeckUnreadModule.scheduleDockBadgeSync();
-  if (!LITE) {
-    WaDeckScheduleModule.startScheduleRunner();
-    WaDeckFavoritesModule.startFavoritePolling();
-    WaDeckImportantModule.startImportantPolling();
-  }
+  WaDeckScheduleModule.startScheduleRunner();
+  WaDeckFavoritesModule.startFavoritePolling();
+  WaDeckImportantModule.startImportantPolling();
   // Idle-suspend disabled: destroying inactive webviews after 15 min forced
   // users to re-click every account to reload WhatsApp Web, which in turn
   // missed incoming messages while suspended. Keeping all webviews alive for

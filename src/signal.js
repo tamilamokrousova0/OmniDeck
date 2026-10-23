@@ -236,7 +236,42 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userData
     const next = list.filter((m) => !(groupId ? m.groupId === groupId : (!m.groupId && ids.has(m.recipient))));
     messages.set(accountId, next);
     persistMessages();
+    pruneAttachments(list.filter((m) => !next.includes(m)));
     return { ok: true, removed: list.length - next.length };
+  }
+
+  /* Файлы вложений signal-cli кладёт в ATTACHMENTS_DIR сам и сам их не удаляет:
+     сообщения, вытесненные капом истории, удалённые чаты и аккаунты оставляли
+     на диске сотни МБ в месяц. Удаляем файлы ушедших сообщений, если на них не
+     ссылается больше ничто в истории. Только внутри ATTACHMENTS_DIR (realpath):
+     у исходящих в истории лежат пути к файлам пользователя — их не трогаем. */
+  function pruneAttachments(removed) {
+    const paths = new Set();
+    for (const m of removed || []) {
+      for (const a of (Array.isArray(m?.attachments) ? m.attachments : [])) {
+        if (a?.path) paths.add(String(a.path));
+      }
+    }
+    if (!paths.size) return;
+    for (const list of messages.values()) {
+      for (const m of list) {
+        for (const a of (Array.isArray(m?.attachments) ? m.attachments : [])) {
+          if (a?.path) paths.delete(String(a.path));
+        }
+      }
+    }
+    if (!paths.size) return;
+    (async () => {
+      let root;
+      try { root = await fsSync.promises.realpath(ATTACHMENTS_DIR); } catch { return; }
+      for (const p of paths) {
+        try {
+          const real = await fsSync.promises.realpath(p);
+          if (!real.startsWith(root + path.sep)) continue;
+          await fsSync.promises.unlink(real);
+        } catch { /* уже нет / нет прав */ }
+      }
+    })();
   }
 
   /* accountId → сколько раз подряд демон падал: даёт backoff в close-хендлере. */
@@ -253,9 +288,10 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userData
   function recordMsg(accountId, msg) {
     const list = messages.get(accountId) || [];
     list.push(msg);
-    if (list.length > MSG_CAP) list.splice(0, list.length - MSG_CAP);
+    const evicted = list.length > MSG_CAP ? list.splice(0, list.length - MSG_CAP) : [];
     messages.set(accountId, list);
     persistMessages();
+    if (evicted.length) pruneAttachments(evicted);
   }
 
   const daemons = new Map(); // accountId → { proc, deliberate }
@@ -376,34 +412,70 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userData
     return null;
   }
 
+  /* Санитария: осиротевшие signal-cli этого номера (от убитого без
+     before-quit процесса деки или JVM, зависшей в shutdown-хуках после
+     SIGTERM) молча съедают входящие и держат lock аккаунта — новый демон
+     падал и уходил в backoff. SIGTERM, ждём выхода до 4 с, затем SIGKILL.
+     Асинхронно: spawnSync PowerShell морозил UI на секунды при каждом старте.
+     '+' в E164 — квантификатор ERE: без экранирования pkill молча падал
+     с exit 2 и санитария не работала вообще. */
+  function runQuiet(cmd, args, timeoutMs = 10000) {
+    return new Promise((resolve) => {
+      let proc;
+      try { proc = spawn(cmd, args, { windowsHide: true, stdio: 'ignore' }); } catch { resolve(-1); return; }
+      const timer = setTimeout(() => { try { proc.kill(); } catch { /* ignore */ } }, timeoutMs);
+      proc.on('error', () => { clearTimeout(timer); resolve(-1); });
+      proc.on('close', (code) => { clearTimeout(timer); resolve(code); });
+    });
+  }
+  async function killStaleDaemons(number) {
+    const digits = String(number || '').replace(/[^0-9]/g, '');
+    if (!digits) return;
+    if (IS_WIN) {
+      /* По имени процесса бить нельзя: наш демон — обычный java.exe, и
+         taskkill /IM снёс бы любые чужие Java-приложения. Отбираем по
+         командной строке: только наш main-класс и только этот номер.
+         Stop-Process -Force — уже жёсткое завершение. */
+      await runQuiet('powershell', ['-NoProfile', '-Command',
+        `Get-CimInstance Win32_Process -Filter "Name='java.exe'" | `
+        + `Where-Object { $_.CommandLine -like '*org.asamk.signal.Main*${digits}*' } | `
+        + 'ForEach-Object { Stop-Process -Id $_.ProcessId -Force }',
+      ]);
+      return;
+    }
+    const pattern = `signal-cli.*[+]${digits}`;
+    // pkill/pgrep: 0 — нашёл, 1 — никого
+    if (await runQuiet('pkill', ['-f', pattern]) !== 0) return;
+    for (let i = 0; i < 16; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+      if (await runQuiet('pgrep', ['-f', pattern]) !== 0) return;
+    }
+    await runQuiet('pkill', ['-9', '-f', pattern]);
+    await new Promise((r) => setTimeout(r, 300));
+  }
+
+  const _starting = new Set(); // accountId, для которых идёт санитария перед стартом
+  let _stoppingAll = false;
+
   function startDaemon(accountId) {
     const account = accountById(accountId);
     if (!cli()) { setStatus(accountId, 'no_cli'); return; }
     if (!account || account.frozen) return;
     if (!account.signalNumber) { setStatus(accountId, 'unlinked'); return; }
-    if (daemons.has(accountId)) return;
+    if (daemons.has(accountId) || _starting.has(accountId) || _stoppingAll) return;
+    _starting.add(accountId);
+    killStaleDaemons(account.signalNumber)
+      .catch(() => { /* ignore */ })
+      .then(() => {
+        _starting.delete(accountId);
+        // За время санитарии аккаунт могли заморозить, удалить или перепривязать
+        const acc = accountById(accountId);
+        if (_stoppingAll || !acc || acc.frozen || !acc.signalNumber || daemons.has(accountId)) return;
+        spawnDaemon(accountId, acc);
+      });
+  }
 
-    // Санитария: осиротевшие signal-cli этого номера (от убитого без
-    // before-quit процесса деки) молча съедают входящие. Сносим перед стартом.
-    // '+' в E164 — квантификатор ERE: без экранирования pkill молча падал
-    // с exit 2 и санитария не работала вообще. На Windows pkill нет —
-    // там демоны-сироты гасим по имени процесса.
-    try {
-      if (IS_WIN) {
-        /* По имени процесса бить нельзя: наш демон — обычный java.exe, и
-           taskkill /IM снёс бы любые чужие Java-приложения. Отбираем по
-           командной строке: только наш main-класс и только этот номер. */
-        const digits = account.signalNumber.replace(/[^0-9]/g, '');
-        spawnSync('powershell', ['-NoProfile', '-Command',
-          `Get-CimInstance Win32_Process -Filter "Name='java.exe'" | `
-          + `Where-Object { $_.CommandLine -like '*org.asamk.signal.Main*${digits}*' } | `
-          + 'ForEach-Object { Stop-Process -Id $_.ProcessId -Force }',
-        ], { windowsHide: true, timeout: 10000 });
-      } else {
-        spawnSync('pkill', ['-f', `signal-cli.*[+]${account.signalNumber.replace(/[^0-9]/g, '')}`]);
-      }
-    } catch { /* ignore */ }
-
+  function spawnDaemon(accountId, account) {
     // detached: своя process group → kill(-pid) убивает дерево целиком
     const proc = spawnCli(
       ['-a', account.signalNumber, 'jsonRpc'],
@@ -597,6 +669,16 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userData
       // На Windows нет process groups — валим дерево через taskkill /T
       try { spawnSync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { shell: true }); return; } catch { /* ignore */ }
     }
+    /* JVM, зависшая в shutdown-хуках (оборванный websocket после сна), на
+       SIGTERM не выходила и оставалась сиротой на 200–400 МБ с lock'ом
+       аккаунта. Через 5 с добиваем группу SIGKILL, если процесс ещё жив. */
+    const alive = () => proc.exitCode === null && proc.signalCode === null;
+    const killTimer = setTimeout(() => {
+      if (!alive()) return;
+      try { process.kill(-proc.pid, 'SIGKILL'); } catch { try { proc.kill('SIGKILL'); } catch { /* ignore */ } }
+    }, 5000);
+    if (typeof killTimer.unref === 'function') killTimer.unref();
+    proc.once('exit', () => clearTimeout(killTimer));
     try { process.kill(-proc.pid, 'SIGTERM'); return; } catch { /* группа умерла/нет прав */ }
     try { proc.kill(); } catch { /* ignore */ }
   }
@@ -606,6 +688,12 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userData
     if (!entry) { if (nextStatus) setStatus(accountId, nextStatus); return; }
     entry.deliberate = true;
     entry.cleaned = true; // close этого процесса уже ничего не тронет
+    // close-хендлер из-за cleaned уже не ответит — иначе send/listContacts
+    // висели бы до своего 30-секундного таймаута
+    for (const [, cb] of entry.pending) {
+      try { cb({ error: { message: 'daemon_stopped' } }); } catch { /* ignore */ }
+    }
+    entry.pending.clear();
     killTree(entry.proc);
     if (daemons.get(accountId) === entry) daemons.delete(accountId);
     if (nextStatus) setStatus(accountId, nextStatus);
@@ -762,8 +850,10 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userData
     if (linkJob?.accountId === accountId) cancelLink();
     stopDaemon(accountId, null);
     statuses.delete(accountId);
+    const gone = messages.get(accountId) || [];
     messages.delete(accountId);
     persistMessages();
+    pruneAttachments(gone);
   }
 
   /* Имена групп (синкаются с телефона) — для заголовков групповых чатов */
@@ -795,6 +885,7 @@ function initSignal({ getMainWindow, getAccounts, saveStore, storePath, userData
   }
 
   function stopAll() {
+    _stoppingAll = true; // санитария в полёте не должна поднять демон после выхода
     if (linkJob) cancelLink();
     for (const id of Array.from(daemons.keys())) stopDaemon(id, null);
     flushMessages(); // дебаунс-запись не должна теряться при выходе

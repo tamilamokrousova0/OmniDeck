@@ -1,6 +1,6 @@
 /* bindActions(): all DOM event wiring for toolbar, settings, modals,
    hotkeys, zoom, sidebar resize. Extracted verbatim from renderer.js. */
-import { state, els, LITE } from './state.js';
+import { state, els } from './state.js';
 import {
   setStatus,
   showToast,
@@ -492,7 +492,9 @@ function bindActions() {
   const scheduleCard = document.getElementById('schedule-settings-card');
   if (scheduleCard) {
     scheduleCard.addEventListener('toggle', () => {
-      if (scheduleCard.open) {
+      // toggle асинхронный: при «Изменить» он прилетал ПОСЛЕ подстановки
+      // времени задания и сбрасывал его на «сейчас + 1 мин».
+      if (scheduleCard.open && !state._editingScheduleId) {
         els.scheduleAt.value = nextSendAtLocal(1);
       }
     });
@@ -587,12 +589,9 @@ function bindActions() {
 
   // ── Sidebar Resize Handle ──
   if (els.sidebarResizeHandle) {
-    /* Лайт рисует сайдбар списком с именами — ему нужна большая минимальная
-       ширина и СВОЙ ключ: userData общий с обычной декой, и одно значение на
-       двоих оставило бы плиточную деку растянутой на 158px (и наоборот). */
-    const SIDEBAR_MIN = LITE ? 120 : 64;
-    const SIDEBAR_MAX = LITE ? 240 : 200;
-    const SIDEBAR_KEY = LITE ? 'sidebarWidthLite' : 'sidebarWidth';
+    const SIDEBAR_MIN = 64;
+    const SIDEBAR_MAX = 200;
+    const SIDEBAR_KEY = 'sidebarWidth';
     const appRoot = document.getElementById('app-root');
     let resizing = false;
 

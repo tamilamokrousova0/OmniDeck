@@ -20,7 +20,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -72,32 +72,12 @@ jobs:
           SEC_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           SEC_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-      # Лайт-сборка: тот же исходник с флагом, отличается productName, appId и
-      # каналом обновлений (lite-mac.yml вместо latest-mac.yml) — поэтому
-      # апдейтер обычной деки её не видит, и наоборот. Собирается ПОСЛЕ
-      # обычной: electron-builder пересоздаёт dist/mac-arm64, но готовые
-      # dmg/zip предыдущей сборки в dist/ остаются на месте.
-      - name: Build mac lite app
-        run: |
-          if [ -n "$SEC_CSC_LINK" ]; then export CSC_LINK="$SEC_CSC_LINK"; fi
-          if [ -n "$SEC_CSC_KEY_PASSWORD" ]; then export CSC_KEY_PASSWORD="$SEC_CSC_KEY_PASSWORD"; fi
-          if [ -n "$SEC_APPLE_ID" ]; then export APPLE_ID="$SEC_APPLE_ID"; fi
-          if [ -n "$SEC_APPLE_APP_SPECIFIC_PASSWORD" ]; then export APPLE_APP_SPECIFIC_PASSWORD="$SEC_APPLE_APP_SPECIFIC_PASSWORD"; fi
-          if [ -n "$SEC_APPLE_TEAM_ID" ]; then export APPLE_TEAM_ID="$SEC_APPLE_TEAM_ID"; fi
-          npm run dist:mac:lite
-          # Канал лайта обязан указывать на файлы лайта. Если artifactName
-          # когда-нибудь потеряется, lite-mac.yml начнёт ссылаться на обычную
-          # сборку — и лайт «обновится» в полную деку. Ловим это здесь.
-          test -f dist/lite-mac.yml
-          grep -q 'OmniDeck-Lite-.*\.zip' dist/lite-mac.yml
-          grep -q 'OmniDeck-.*\.zip' dist/latest-mac.yml
-          ! grep -q 'OmniDeck-Lite' dist/latest-mac.yml
+      # Подпись zip для самописного mac-апдейтера (сборка без Developer ID).
+      # Без секрета шаг валит сборку: клиенты 0.11+ без .sig обновление не ставят.
+      - name: Sign mac update
+        run: node build/sign-update.js dist/*.zip
         env:
-          SEC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          SEC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          SEC_APPLE_ID: ${{ secrets.APPLE_ID }}
-          SEC_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          SEC_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
 
       - name: Upload mac artifacts
         uses: actions/upload-artifact@v7
@@ -108,8 +88,8 @@ jobs:
             dist/*.dmg.blockmap
             dist/*.zip
             dist/*.zip.blockmap
+            dist/*.zip.sig
             dist/latest-mac.yml
-            dist/lite-mac.yml
           if-no-files-found: error
 
   build-win:
@@ -122,7 +102,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -162,19 +142,6 @@ jobs:
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
-      # Лайт под Windows: тот же исходник, свой appId и свой канал обновлений
-      # (lite.yml вместо latest.yml). Отдельный appId даёт NSIS отдельную
-      # установку и отдельные ярлыки, поэтому обычная дека не затирается.
-      - name: Build win lite app
-        run: |
-          npm run dist:win:lite
-          if (-not (Test-Path dist/lite.yml)) { throw "lite.yml не создан" }
-          if (-not (Select-String -Path dist/lite.yml -Pattern 'OmniDeck-Lite')) { throw "канал лайта ссылается не на лайт" }
-          if (Select-String -Path dist/latest.yml -Pattern 'OmniDeck-Lite') { throw "в latest.yml попал лайт" }
-        env:
-          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
-
       - name: Upload win artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -183,7 +150,6 @@ jobs:
             dist/*.exe
             dist/*.exe.blockmap
             dist/latest.yml
-            dist/lite.yml
           if-no-files-found: error
 
   release:
@@ -240,12 +206,11 @@ jobs:
             dist-artifacts/**/*.dmg.blockmap
             dist-artifacts/**/*.zip
             dist-artifacts/**/*.zip.blockmap
+            dist-artifacts/**/*.zip.sig
             dist-artifacts/**/*.exe
             dist-artifacts/**/*.exe.blockmap
             dist-artifacts/**/latest.yml
             dist-artifacts/**/latest-mac.yml
-            dist-artifacts/**/lite-mac.yml
-            dist-artifacts/**/lite.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -254,7 +219,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mapfile -t metadata_files < <(find dist-artifacts -type f \( -name 'latest.yml' -o -name 'latest-mac.yml' -o -name 'lite-mac.yml' -o -name 'lite.yml' -o -name '*.blockmap' \))
+          mapfile -t metadata_files < <(find dist-artifacts -type f \( -name 'latest.yml' -o -name 'latest-mac.yml' -o -name '*.blockmap' \))
           if [ ${#metadata_files[@]} -eq 0 ]; then
             echo "No updater metadata files found" >&2
             exit 1

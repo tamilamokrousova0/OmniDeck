@@ -494,6 +494,9 @@ function openChatContextMenu(e, account, chat) {
     _msgs.set(account.id, list);
     const stubs = _stubChats.get(account.id);
     stubs?.delete(chat.key);
+    // Иначе непрочитанные удалённого чата навсегда залипали в бейдже аккаунта
+    _chatUnread.get(account.id)?.delete(chat.key);
+    syncAccountBadge(account.id);
     if (_selChat.get(account.id) === chat.key) _selChat.delete(account.id);
     render();
   }, true);
@@ -1021,7 +1024,9 @@ function renderFeed(panel, account, msgs, hadFocus, searchHadFocus) {
       _replyTo.delete(`${account.id}:${selKey}`);
       render();
     } else {
-      errLine.textContent = `Не отправилось: ${res?.error || 'ошибка'}`;
+      errLine.textContent = res?.error === 'path_not_allowed'
+        ? 'Не отправилось: файл из закрытой папки, выберите его через скрепку'
+        : `Не отправилось: ${res?.error || 'ошибка'}`;
       errLine.classList.remove('hidden');
     }
   };
@@ -1058,6 +1063,7 @@ function renderFeed(panel, account, msgs, hadFocus, searchHadFocus) {
     b.textContent = em;
     b.addEventListener('click', () => {
       input.value += em;
+      _drafts.set(draftKey, input.value); // иначе смайл терялся при перерисовке
       input.focus();
     });
     emojiPanel.appendChild(b);
@@ -1452,7 +1458,11 @@ function handleEvent(payload) {
     if (payload.msg) {
       pushMsg(accountId, payload.msg);
       const key = chatKey(payload.msg, accountId);
+      // _visibleAccountId не сбрасывается при уходе в WhatsApp/Telegram:
+      // без проверки видимости панели входящие в последнем открытом чате
+      // не давали ни бейджа, ни строки в ленте непрочитанных
       const isOpenChat = accountId === _visibleAccountId
+        && Boolean(_panel) && !_panel.classList.contains('hidden')
         && _selChat.get(accountId) === key
         && document.hasFocus();
       if (!isOpenChat) {

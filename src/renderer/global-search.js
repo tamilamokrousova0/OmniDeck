@@ -124,9 +124,22 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
         const webview = state.webviews.get(account.id);
         if (!isWebviewReady?.(webview)) { _sweepDone++; continue; } // спит/грузится — остаётся кэш
         const token = typeof WADECK_WV_TOKEN !== 'undefined' ? WADECK_WV_TOKEN : '';
+        /* Сборщик крутит #pane-side ~5 с — делит webview с планировщиком и
+           прыжками в чат через общую блокировку. Фон в занятый webview не
+           встаёт в очередь: список возьмём со следующего тика. */
+        const sched = window.WaDeckScheduleModule || {};
+        // Пользователь мог переключиться на этот аккаунт посреди прохода —
+        // фильтр выше смотрел на активный аккаунт только в начале.
+        if (background && (account.id === state.activeAccountId || sched.isWebviewLocked?.(webview))) {
+          _sweepDone++;
+          continue;
+        }
+        const collect = () => safeExecuteInWebview(webview, collectChatsFromSidebarScript(token), true);
         let chats = null;
         try {
-          chats = await safeExecuteInWebview(webview, collectChatsFromSidebarScript(token), true);
+          chats = await (typeof sched.withWebviewLock === 'function'
+            ? sched.withWebviewLock(webview, collect)
+            : collect());
         } catch { chats = null; }
         const normalized = Array.isArray(chats)
           ? chats.map((c) => String(c || '').trim()).filter(Boolean)

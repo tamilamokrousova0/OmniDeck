@@ -6,8 +6,7 @@
 
 ```bash
 npm install
-npm start          # полная сборка
-npm run dev:lite   # облегчённая (OMNIDECK_LITE=1)
+npm start
 ```
 
 Бандл интерфейса собирается отдельно:
@@ -25,9 +24,7 @@ npm run build:renderer
 |---|---|
 | `npm run dist:mac` | macOS Apple Silicon, `.dmg` и `.zip` |
 | `npm run dist:win` | Windows x64, NSIS `.exe` |
-| `npm run dist:mac:lite` | то же для Lite, свой appId и канал обновлений |
-| `npm run dist:win:lite` | то же для Lite под Windows |
-| `npm run dist:all` | оба основных таргета |
+| `npm run dist:all` | оба таргета |
 
 Готовые файлы кладутся в `dist/`.
 
@@ -40,14 +37,7 @@ macOS собирается **только под arm64**. Intel-сборок н�
 1. Поднять `version` в `package.json` и `package-lock.json`.
 2. Закоммитить, `git push origin main`.
 3. `git tag -a vX.Y.Z -m "OmniDeck X.Y.Z"` и `git push origin vX.Y.Z`.
-4. Workflow соберёт macOS и Windows, обе редакции, и создаст GitHub Release.
-
-Проверить после сборки:
-
-- в `latest-mac.yml` и `latest.yml` попали основные сборки, а не Lite;
-- Lite ушёл в свои `lite-mac.yml` и `lite.yml`.
-
-Эти проверки уже встроены в workflow и валят сборку при перепутывании каналов.
+4. Workflow соберёт macOS и Windows и создаст GitHub Release.
 
 ## Автообновление
 

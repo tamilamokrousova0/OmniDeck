@@ -137,10 +137,36 @@ function voiceTranscribeButtonsScript(token) {
       sweepTimer = setTimeout(() => { sweepTimer = null; try { sweep(); } catch (_) {} }, 400);
     };
 
+    /* В фоновом аккаунте observer на всё body с subtree порождал MutationRecord
+       на каждую мутацию WhatsApp (давление на GC), хотя колбэк сразу выходил.
+       Отключаем его при неактивности и включаем обратно при активации: флаг
+       дека пишет присваиванием window.__waDeckWebviewActive (pushActiveFlag),
+       поэтому перехватываем запись аксессором. */
     const observer = new MutationObserver(scheduleSweep);
-    observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+    let observing = false;
+    const syncObserver = () => {
+      const want = window.__waDeckWebviewActive !== false;
+      if (want && !observing) {
+        observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+        observing = true;
+        scheduleSweep();
+      } else if (!want && observing) {
+        observer.disconnect();
+        observing = false;
+        if (sweepTimer) { clearTimeout(sweepTimer); sweepTimer = null; }
+      }
+    };
+    try {
+      let activeFlag = window.__waDeckWebviewActive;
+      Object.defineProperty(window, '__waDeckWebviewActive', {
+        configurable: true,
+        get() { return activeFlag; },
+        set(v) { activeFlag = v; try { syncObserver(); } catch (_) {} },
+      });
+    } catch (_) {}
+    syncObserver();
+    // Страховочный свип; в фоне scheduleSweep выходит сразу
     setInterval(scheduleSweep, 8000);
-    scheduleSweep();
     return true;
   })();`;
 }

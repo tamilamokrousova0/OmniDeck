@@ -1,9 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-const IS_LITE = process.argv.includes('--omnideck-lite');
-
 contextBridge.exposeInMainWorld('waDeck', {
-  lite: IS_LITE,
   mac: process.platform === 'darwin',
   bootstrap: () => ipcRenderer.invoke('bootstrap'),
   addAccount: (type) => ipcRenderer.invoke('add-account', type),

@@ -29,6 +29,7 @@ function slashTemplatesScript(token) {
     } catch {}
 
     let popup = null;
+    let watchTimer = null;
     let items = [];        // отфильтрованные шаблоны, отображаемые сейчас
     let selIndex = 0;
     let templatesCache = null;
@@ -120,6 +121,7 @@ function slashTemplatesScript(token) {
 
     function closePopup() {
       window.__waDeckSlashPopupOpen = false;
+      if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
       if (popup) { try { popup.remove(); } catch {} popup = null; }
       items = [];
       selIndex = 0;
@@ -230,6 +232,7 @@ function slashTemplatesScript(token) {
           popup = buildPopup();
           document.body.appendChild(popup);
           window.__waDeckSlashPopupOpen = true;
+          startWatch();
         }
         positionPopup();
         renderList();
@@ -285,10 +288,16 @@ function slashTemplatesScript(token) {
     document.addEventListener('mousedown', (e) => {
       if (popup && !popup.contains(e.target)) closePopup();
     }, true);
-    setInterval(() => {
-      if (popup && (!getComposer() || composerSlashQuery() === null)) closePopup();
-      if (popup) positionPopup();
-    }, 1000);
+    /* Сторож живёт только пока попап открыт: постоянный секундный интервал
+       тикал во всех вебвью, включая фоновые аккаунты. */
+    function startWatch() {
+      if (watchTimer) return;
+      watchTimer = setInterval(() => {
+        if (popup && (!getComposer() || composerSlashQuery() === null)) closePopup();
+        if (popup) positionPopup();
+        else if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
+      }, 1000);
+    }
 
     return true;
   })();`;

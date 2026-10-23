@@ -1,6 +1,6 @@
 /* Hub dashboard: greeting, clocks, filters, account cards, hub actions and
    the toolbar clock tooltip. Extracted verbatim from renderer.js. */
-import { state, els, LITE } from './state.js';
+import { state, els } from './state.js';
 import { brandIconSvg } from './brand-icons.js';
 import { setActiveAccount, addAccount } from './accounts.js';
 import { openSettingsPanel, closeSettingsPanel } from './settings.js';
@@ -200,7 +200,7 @@ function updateHubGreeting() {
 
   const titleEl = document.getElementById('hub-title');
   if (titleEl) {
-    titleEl.textContent = LITE ? 'OmniDeck Lite' : 'OmniDeck';
+    titleEl.textContent = 'OmniDeck';
     titleEl.classList.remove('hub-title--motivation');
   }
 }
@@ -219,20 +219,8 @@ function updateHubFilters() {
 
 /* Вкладка «Аккаунты» показывает все аккаунты; фильтры непрочитанных/
    избранных/важных теперь живут в ленте (unread-feed), не в списке карточек. */
-/* Вкладки «Непрочитанные/Избранные/Важные» в лайте скрыты, но state общий с
-   обычной декой: если там был выбран такой фильтр, лайт открылся бы на
-   невидимой вкладке с пустым списком. */
-function normalizeHubFilterForLite() {
-  if (LITE && ['unread', 'favorites', 'important'].includes(state.hubFilter)) {
-    state.hubFilter = 'all';
-  }
-}
-
 function filteredHubAccounts() {
-  normalizeHubFilterForLite();
-  const all = state.accounts || [];
-  // Профиль общий с обычной декой, но клиента Signal в лайте нет.
-  return LITE ? all.filter((a) => a.type !== 'signal') : all;
+  return state.accounts || [];
 }
 
 async function updateHubDashboard() {
@@ -281,11 +269,6 @@ async function updateHubDashboard() {
     avWrap.style.setProperty('--tile', account.color || '#8a93a6');
     const labelText = (account.name || '').split(' ')[0].slice(0, 2).toUpperCase() || (account.type === 'telegram' ? 'TG' : (account.type === 'signal' ? 'SG' : 'WA'));
     avWrap.textContent = labelText;
-    /* В лайте плитка несёт глиф бренда вместо инициалов: на 24px две буквы
-       нечитаемы, а тип иначе виден только тегом, который мы убрали. */
-    if (LITE) {
-      avWrap.innerHTML = brandIconSvg(account.type === 'telegram' ? 'telegram' : 'whatsapp', { size: 13, color: '#fff' });
-    }
     if (account.frozen) {
       const status = document.createElement('span');
       status.className = 'hub-acct-status frozen';
@@ -394,8 +377,7 @@ async function updateHubDashboard() {
   settingsBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
   settingsBtn.addEventListener('click', () => { if (state.panelHidden) openSettingsPanel(); else closeSettingsPanel(); });
 
-  if (LITE) actions.append(addWaBtn, addTgBtn, settingsBtn);
-  else actions.append(addWaBtn, addTgBtn, addSgBtn, settingsBtn);
+  actions.append(addWaBtn, addTgBtn, addSgBtn, settingsBtn);
   actionsHost.appendChild(actions);
 
 }
