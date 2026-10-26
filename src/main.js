@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell, clipboard, session, Menu, webContents, powerMonitor, nativeImage } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, clipboard, ClipboardItem, session, Menu, webContents, powerMonitor, nativeImage } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs/promises');
@@ -6,7 +6,7 @@ const fsSync = require('fs');
 const crypto = require('crypto');
 const { spawnSync, spawn } = require('child_process');
 const https = require('https');
-const { pathToFileURL } = require('url');
+const { pathToFileURL, fileURLToPath } = require('url');
 const os = require('os');
 const { transcribeVoiceAt, transcribeWavBase64, cleanupStaleModels, killWhisper } = require('./voice-transcribe');
 const { initSignal } = require('./signal');
@@ -2115,6 +2115,54 @@ function createWindow() {
   attachWindowResilience();
 }
 
+/* Вставка картинки, скопированной файлом. Telegram для macOS по «Копировать
+   медиа» кладёт в буфер только ссылку на файл в своём Group Container; с 0.11
+   (Electron 45) WhatsApp получает её как файл без превью — «Предварительный
+   просмотр недоступен». Перед вставкой подменяем буфер самой картинкой:
+   дальше она идёт как вставленный скриншот. API буфера в Electron 45
+   асинхронный, поэтому вставку делает вызывающий — после этой функции. */
+const PASTE_IMAGE_EXT = /\.(jpe?g|png|gif|webp|heic|heif|tiff?|bmp)$/i;
+const PASTE_IMAGE_MAX_BYTES = 50 * 1024 * 1024;
+async function promoteClipboardFileToImage() {
+  if (process.platform !== 'darwin') return;
+  try {
+    if (!(await clipboard.has('text/uri-list')) || (await clipboard.has('image/png'))) return;
+    const [item] = await clipboard.read();
+    if (!item || !item.types.includes('text/uri-list')) return;
+    const uris = (await (await item.getType('text/uri-list')).text())
+      .split(/\r?\n/).map((s) => s.trim()).filter((s) => s && !s.startsWith('#'));
+    // Скопировано несколько файлов — не трогаем, иначе вставится только один
+    if (uris.length !== 1 || !uris[0].startsWith('file://')) return;
+    const filePath = fileURLToPath(uris[0]);
+    if (!PASTE_IMAGE_EXT.test(filePath)) return;
+    const stat = await fs.stat(filePath);
+    if (!stat.isFile() || stat.size > PASTE_IMAGE_MAX_BYTES) return;
+    let img = nativeImage.createFromBuffer(await fs.readFile(filePath));
+    if (img.isEmpty()) img = nativeImage.createFromPath(filePath); // HEIC/TIFF — через NSImage
+    if (img.isEmpty()) {
+      console.warn('[paste] not decodable as image:', path.basename(filePath));
+      return;
+    }
+    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([img.toPNG()], { type: 'image/png' }) })]);
+  } catch (e) {
+    console.warn('[paste] image promote failed:', e?.code || e?.message || e);
+  }
+}
+
+function pasteIntoWhatsApp(contents) {
+  promoteClipboardFileToImage().finally(() => {
+    if (!contents.isDestroyed()) contents.paste();
+  });
+}
+
+function isWhatsAppContents(contents) {
+  try {
+    return /^https:\/\/web\.whatsapp\.com\//.test(String(contents.getURL() || ''));
+  } catch {
+    return false;
+  }
+}
+
 /* Маршрутизация сквозных хоткеев. Вешается И на окно деки, И на КАЖДЫЙ
    webview-гость: когда курсор стоит в поле ввода мессенджера, клавиатурные
    события уходят в его webContents и до окна деки не доходят вовсе —
@@ -2379,6 +2427,13 @@ function setupWebviewGuards() {
       // без этой строки сквозные хоткеи (Cmd+K/T/R/U, Cmd+Shift+E, F1, Esc)
       // из чата не срабатывали вовсе
       routeHostHotkey(event, input, true);
+      if (String(input?.type || '').toLowerCase() === 'keydown'
+          && String(input?.key || '').toLowerCase() === 'v'
+          && input?.meta && !input?.alt && !input?.control && !input?.shift
+          && process.platform === 'darwin' && isWhatsAppContents(contents)) {
+        event.preventDefault();
+        pasteIntoWhatsApp(contents);
+      }
     });
     // Срок годности флага: keyup мог уйти мимо этого webContents (фокус увело
     // открытие внешнего браузера) — иначе «наоборот» залипал до следующей клавиши
@@ -2471,7 +2526,13 @@ function setupWebviewGuards() {
           { type: 'separator' },
           { role: 'cut', label: 'Вырезать' },
           { role: 'copy', label: 'Копировать' },
-          { role: 'paste', label: 'Вставить' },
+          {
+            label: 'Вставить',
+            click: () => {
+              if (isWhatsAppContents(contents)) pasteIntoWhatsApp(contents);
+              else contents.paste();
+            },
+          },
           { role: 'selectAll', label: 'Выделить всё' },
         );
       }
@@ -3861,7 +3922,7 @@ function registerIpc() {
   });
 
   handle('get-clipboard-text', async () => {
-    return { ok: true, text: clipboard.readText() };
+    return { ok: true, text: await clipboard.readText() };
   });
 
   handle('open-external', async (_event, url) => {

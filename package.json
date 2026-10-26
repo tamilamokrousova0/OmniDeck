@@ -1,6 +1,6 @@
 {
   "name": "omnideck",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "OmniDeck: multi-account WhatsApp / Telegram / Signal deck",
   "main": "src/main.js",
   "scripts": {
