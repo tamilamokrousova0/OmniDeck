@@ -6841,3 +6841,19 @@ div.toggle-row {
   bottom: 16px;
   right: 16px;
 }
+
+/* ── Кнопка во всю ширину внутри карточки настроек: width:100% плюс
+   боковые отступы выталкивали её за правый край полей ── */
+.settings-view-detail details.card-collapsible > .btn.full,
+.settings-view-detail details.card-collapsible > .btn-add-clock {
+  width: calc(100% - 16px);
+}
+
+/* ── Тихие кнопки должны читаться как кнопки ── */
+.btn-add-clock {
+  color: var(--text-2);
+}
+.account-menu-reset-btn {
+  border-color: var(--stroke);
+  color: var(--text-2);
+}
