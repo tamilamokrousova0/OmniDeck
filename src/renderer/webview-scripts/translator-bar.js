@@ -60,16 +60,16 @@ function translatorBarScript(token) {
     function palette() {
       return waIsDark()
         ? {
-          barBg: '#1f2c33', barFg: '#e9edef', barBorder: '#2a3942',
-          menuBg: '#233138', menuFg: '#e9edef', menuHover: 'rgba(255,255,255,0.08)',
-          overlayBg: 'rgba(31,44,51,0.97)', overlayFg: '#e9edef',
-          muted: '#8696a0', accent: '#00a884',
+          barBg: '#191a19', barFg: '#f5f5f2', barBorder: 'rgba(255,255,255,0.08)',
+          menuBg: '#212321', menuFg: '#f5f5f2', menuHover: 'rgba(255,255,255,0.08)',
+          overlayBg: 'rgba(25,26,25,0.97)', overlayFg: '#f5f5f2',
+          muted: '#8b8d86', accent: '#86ea54',
         }
         : {
-          barBg: '#eff6e4', barFg: '#1a2030', barBorder: '#d8e4c6',
-          menuBg: '#ffffff', menuFg: '#1a2030', menuHover: 'rgba(0,0,0,0.06)',
+          barBg: '#f1f1ee', barFg: '#111210', barBorder: 'rgba(17,18,16,0.08)',
+          menuBg: '#ffffff', menuFg: '#111210', menuHover: 'rgba(0,0,0,0.06)',
           overlayBg: 'rgba(255,255,255,0.98)', overlayFg: '#111b21',
-          muted: '#667781', accent: '#008069',
+          muted: '#7b7d76', accent: '#2f9a1f',
         };
     }
 
@@ -227,8 +227,8 @@ function translatorBarScript(token) {
       ].join(';');
 
       const globe = document.createElement('span');
-      globe.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z"/></svg>';
-      globe.style.cssText = 'display:flex;align-items:center;justify-content:center;flex-shrink:0;width:26px;height:26px;border-radius:50%;background:rgba(34,197,94,0.12);box-shadow:inset 0 0 0 1px rgba(34,197,94,0.25);';
+      globe.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#58cc30" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z"/></svg>';
+      globe.style.cssText = 'display:flex;align-items:center;justify-content:center;flex-shrink:0;width:26px;height:26px;border-radius:50%;background:rgba(122,230,74,0.2);';
       bar.appendChild(globe);
 
       // ── Incoming section ──
@@ -262,8 +262,8 @@ function translatorBarScript(token) {
       translateBtn.textContent = 'Перевести';
       translateBtn.title = 'Перевести выделенный текст в поле ввода';
       translateBtn.style.cssText = [
-        'background:#22c55e',
-        'color:#fff',
+        'background:#7ae64a',
+        'color:#0d1a07',
         'border:none',
         'border-radius:999px',
         'padding:6px 14px',
@@ -273,10 +273,10 @@ function translatorBarScript(token) {
         'flex-shrink:0',
         'transition:background 0.2s ease, transform 0.1s ease',
         'letter-spacing:0.01em',
-        'box-shadow:0 2px 6px -2px rgba(34,197,94,0.4)',
+        'box-shadow:none',
       ].join(';');
-      translateBtn.addEventListener('mouseenter', () => { translateBtn.style.background = '#16a34a'; });
-      translateBtn.addEventListener('mouseleave', () => { translateBtn.style.background = '#22c55e'; });
+      translateBtn.addEventListener('mouseenter', () => { translateBtn.style.background = '#86ea54'; });
+      translateBtn.addEventListener('mouseleave', () => { translateBtn.style.background = '#7ae64a'; });
       // preventDefault на mousedown держит фокус в композере: без него клик
       // по кнопке уводит фокус, и insertText с переводом падает мимо поля.
       translateBtn.addEventListener('mousedown', (e) => { e.preventDefault(); });
@@ -302,7 +302,7 @@ function translatorBarScript(token) {
         'transition:all 0.15s',
       ].join(';');
       closeBtn.addEventListener('mouseenter', () => {
-        closeBtn.style.color = '#1a2030';
+        closeBtn.style.color = '#111210';
         closeBtn.style.background = 'rgba(0,0,0,0.05)';
       });
       closeBtn.addEventListener('mouseleave', () => {
@@ -373,17 +373,17 @@ function translatorBarScript(token) {
 
       function paint() {
         if (autoTranslate) {
-          wrap.style.background = '#22c55e';
-          wrap.style.borderColor = '#22c55e';
-          wrap.style.color = '#ffffff';
-          track.style.background = 'rgba(255,255,255,0.35)';
+          wrap.style.background = '#7ae64a';
+          wrap.style.borderColor = '#7ae64a';
+          wrap.style.color = '#0d1a07';
+          track.style.background = 'rgba(13,26,7,0.28)';
           knob.style.left = '12px';
           knob.style.background = '#ffffff';
           labelEl.textContent = 'Перевод активен';
         } else {
           wrap.style.background = 'rgba(255,255,255,0.5)';
           wrap.style.borderColor = 'rgba(0,0,0,0.08)';
-          wrap.style.color = '#1a2030';
+          wrap.style.color = '#111210';
           track.style.background = '#d1d5db';
           knob.style.left = '1px';
           knob.style.background = '#ffffff';
@@ -461,7 +461,7 @@ function translatorBarScript(token) {
         'left:0',
         'background:' + P.menuBg,
         'border:1px solid ' + P.barBorder,
-        'border-radius:8px',
+        'border-radius:14px',
         'padding:4px',
         'z-index:100',
         'min-width:145px',
@@ -473,7 +473,7 @@ function translatorBarScript(token) {
         item.textContent = lang.label;
         item.style.cssText = [
           'padding:7px 12px',
-          'border-radius:5px',
+          'border-radius:8px',
           'cursor:pointer',
           'font-size:12.5px',
           'color:' + (lang.code === current ? P.accent : P.menuFg),
@@ -771,7 +771,7 @@ function translatorBarScript(token) {
         'min-height:100%',
         'background:' + P.overlayBg,
         'border:1px solid ' + P.barBorder,
-        'border-radius:8px',
+        'border-radius:14px',
         'padding:24px 12px 10px 12px',
         'color:' + P.overlayFg,
         'font-size:13px',

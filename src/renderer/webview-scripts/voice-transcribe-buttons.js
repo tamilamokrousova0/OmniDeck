@@ -71,11 +71,11 @@ function voiceTranscribeButtonsScript(token) {
         'width:fit-content',
         'font-size:11px',
         'line-height:1.5',
-        'border-radius:10px',
+        'border-radius:999px',
         /* Та же логика темы, что у переводчика: тёмная пилюля на светлом WA
            выпадала из интерфейса. */
         'background:' + (waIsDark() ? 'rgba(31,44,51,0.9)' : 'rgba(255,255,255,0.95)'),
-        'border:1px solid ' + (waIsDark() ? '#2a3942' : '#d8e4c6'),
+        'border:1px solid ' + (waIsDark() ? 'rgba(255,255,255,0.1)' : 'rgba(17,18,16,0.1)'),
         'color:' + (waIsDark() ? '#8696a0' : '#667781'),
         'cursor:pointer',
         'user-select:none',

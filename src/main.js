@@ -1718,7 +1718,7 @@ function createWindow() {
     minHeight: 760,
     title: APP_TITLE,
     icon: fsSync.existsSync(APP_ICON_PNG_PATH) ? APP_ICON_PNG_PATH : undefined,
-    backgroundColor: '#080f1a',
+    backgroundColor: '#0f100f',
     // macOS 26 Tahoe: WindowServer жжёт GPU на тени окна (electron/electron#48311,
     // microsoft/vscode#267724). Тень выключаем на Darwin 25+ — тот же эффект, что
     // у обхода CHROME_HEADLESS=1, но без env и переживает перезагрузку.

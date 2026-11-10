@@ -150,9 +150,9 @@ function slashTemplatesScript(token) {
       el.style.cssText = [
         'position:fixed',
         'z-index:9999',
-        'background:#1f2937',
-        'color:#e5eaf0',
-        'border-radius:10px',
+        'background:#191a19',
+        'color:#f5f5f2',
+        'border-radius:14px',
         'box-shadow:0 8px 28px rgba(0,0,0,0.45)',
         'padding:6px',
         'min-width:280px',
@@ -197,16 +197,16 @@ function slashTemplatesScript(token) {
         const row = document.createElement('div');
         row.style.cssText = [
           'padding:6px 8px',
-          'border-radius:6px',
+          'border-radius:8px',
           'cursor:pointer',
           'display:flex',
           'flex-direction:column',
           'gap:1px',
-          'background:' + (idx === selIndex ? 'rgba(61,214,140,0.16)' : 'transparent'),
+          'background:' + (idx === selIndex ? 'rgba(134,234,84,0.16)' : 'transparent'),
         ].join(';');
         const title = document.createElement('div');
         title.textContent = tpl.title || 'Шаблон';
-        title.style.cssText = 'font-weight:600;color:' + (idx === selIndex ? '#3dd68c' : '#e5eaf0') + ';';
+        title.style.cssText = 'font-weight:600;color:' + (idx === selIndex ? '#8cec5c' : '#f5f5f2') + ';';
         const preview = document.createElement('div');
         preview.textContent = String(tpl.text || '').replace(/\\s+/g, ' ').slice(0, 64);
         preview.style.cssText = 'font-size:11px;color:#9ca3af;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';

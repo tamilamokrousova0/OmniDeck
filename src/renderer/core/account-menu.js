@@ -269,7 +269,7 @@ async function changeAccountIconFromMenu() {
     els.accountMenuResetIcon.classList.remove('hidden');
   }
   if (els.accountMenuIcon) {
-    els.accountMenuIcon.style.borderColor = '#3dd68c';
+    els.accountMenuIcon.style.borderColor = 'var(--lime)';
   }
   setStatus(`Иконка выбрана: ${account.name}. Нажмите «Сохранить»`);
 }
