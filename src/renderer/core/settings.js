@@ -1,8 +1,7 @@
-/* Settings panel, theme/tiles, tweaks popover, clocks settings and the
+/* Settings panel, theme/tiles, clocks settings and the
    templates library. Extracted verbatim from renderer.js. */
 import { state, els } from './state.js';
 import { setStatus, showConfirm } from './helpers.js';
-import { selectedWebview } from './accounts.js';
 import { insertTextIntoActiveChat } from './webviews.js';
 import { WaDeckWeatherModule } from '../weather.js';
 import { WaDeckCrmModule } from '../crm.js';
@@ -134,28 +133,6 @@ function getTimezoneOptions() {
   });
 }
 
-/**
- * Tweaks FAB lives bottom-right. It should only appear when the user is on the
- * Hub screen or has the Settings panel open — not while viewing a WhatsApp chat,
- * where it would overlap message content.
- */
-function refreshTweaksFabVisibility() {
-  const fab = document.getElementById('tweaks-fab');
-  const popover = document.getElementById('tweaks-panel');
-  if (!fab) return;
-  const activeAcc = state.accounts?.find((a) => a.id === state.activeAccountId);
-  // Signal-панель — полноценный «мессенджер» без webview: FAB прячем, как в WA/TG
-  const signalActive = activeAcc?.type === 'signal';
-  const hubVisible = state.startupHubVisible || (!signalActive && (!state.activeAccountId || !selectedWebview()));
-  const settingsVisible = !state.panelHidden;
-  const shouldShow = hubVisible || settingsVisible;
-  fab.classList.toggle('is-hidden', !shouldShow);
-  // If we're hiding the FAB and popover is open, close it too
-  if (!shouldShow && popover && !popover.classList.contains('hidden')) {
-    toggleTweaksPopover(false);
-  }
-}
-
 function isTranslatorEnabled() {
   return state.settings?.translatorEnabled !== false;
 }
@@ -207,7 +184,7 @@ function applySettingsToForm(options = {}) {
   if (typeof refreshSettingsMenuSubtitles === 'function') {
     refreshSettingsMenuSubtitles();
   }
-  refreshTweakPills();
+  refreshAppearanceControls();
 }
 
 function updatePanelVisibility() {
@@ -223,28 +200,12 @@ function openSettingsPanel() {
   // Always land on the top-level menu when opening fresh
   showSettingsMenu();
   refreshSettingsMenuSubtitles();
-  refreshTweaksFabVisibility();
 }
 
 function closeSettingsPanel() {
   state.panelHidden = true;
   updatePanelVisibility();
   els.togglePanel?.classList.remove('is-active');
-  refreshTweaksFabVisibility();
-}
-
-/* ── Floating Tweaks widget: toggle / outside-click close ─────── */
-
-function toggleTweaksPopover(forceOpen) {
-  const panel = document.getElementById('tweaks-panel');
-  const fab = document.getElementById('tweaks-fab');
-  if (!panel || !fab) return;
-  const isHidden = panel.classList.contains('hidden');
-  const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : isHidden;
-  panel.classList.toggle('hidden', !shouldOpen);
-  fab.classList.toggle('is-active', shouldOpen);
-  // Make sure pills reflect current state every time we open
-  if (shouldOpen && typeof refreshTweakPills === 'function') refreshTweakPills();
 }
 
 /* ── Settings panel: 2-level menu navigation ───────────────────── */
@@ -256,20 +217,23 @@ const SETTINGS_SECTION_TITLES = {
   weather: 'Погода',
 };
 
-/* ── Tweaks (theme pills) ─────────────────────────────────────
-   Scene/density pickers were removed from the Tweaks UI (theme only now).
+/* ── Оформление: тема и стиль плиток (Настройки → Интерфейс) ──
    Stored uiScene/uiDensity values are still applied once at startup (see
    init) so existing installs keep their exact look; there is no UI to
    change them anymore. */
 
-function refreshTweakPills() {
+function refreshAppearanceControls() {
   const theme = normalizeTheme(state.settings?.uiTheme || 'dark');
-  document.querySelectorAll('.tweak-pill[data-theme]').forEach((el) => {
-    el.classList.toggle('is-active', el.getAttribute('data-theme') === theme);
+  document.querySelectorAll('.seg-btn[data-theme]').forEach((el) => {
+    const on = el.getAttribute('data-theme') === theme;
+    el.classList.toggle('is-active', on);
+    el.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
   const tiles = normalizeTileMode(state.settings?.uiTiles);
-  document.querySelectorAll('.tweak-pill[data-tiles]').forEach((el) => {
-    el.classList.toggle('is-active', el.getAttribute('data-tiles') === tiles);
+  document.querySelectorAll('.seg-btn[data-tiles]').forEach((el) => {
+    const on = el.getAttribute('data-tiles') === tiles;
+    el.classList.toggle('is-active', on);
+    el.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
 }
 
@@ -566,9 +530,9 @@ function refreshSettingsMenuSubtitles() {
       return `${city} · ${unit === 'fahrenheit' ? '°F' : '°C'}`;
     },
     interface: () => {
+      const theme = normalizeTheme(state.settings?.uiTheme) === 'light' ? 'светлая тема' : 'тёмная тема';
       const t = isTranslatorEnabled() ? 'переводчик вкл' : 'переводчик выкл';
-      const c = isCrmHoverEnabled() ? 'CRM hover вкл' : 'CRM hover выкл';
-      return `${t} · ${c}`;
+      return `${theme} · ${t}`;
     },
     notifications: () => 'по аккаунтам',
   };
@@ -656,7 +620,6 @@ export {
   applyTheme,
   renderClocksSettings,
   getTimezoneOptions,
-  refreshTweaksFabVisibility,
   isTranslatorEnabled,
   isCrmHoverEnabled,
   getHibernateMinutes,
@@ -664,8 +627,7 @@ export {
   updatePanelVisibility,
   openSettingsPanel,
   closeSettingsPanel,
-  toggleTweaksPopover,
-  refreshTweakPills,
+  refreshAppearanceControls,
   normalizeTileMode,
   applyTileMode,
   showSettingsMenu,

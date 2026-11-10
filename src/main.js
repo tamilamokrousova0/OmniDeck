@@ -137,7 +137,7 @@ const DEFAULT_SETTINGS = {
   // Sidebar/hub tile colors: 'raw' = user color as-is, 'calm' = normalized
   // blend (hue kept, luminance unified) — opt-in Tweaks toggle.
   uiTiles: 'raw',
-  weatherCity: 'Moscow',
+  weatherCity: 'Москва',
   weatherUnit: 'celsius',
   lastSeenReleaseNotesVersion: '',
   translatorEnabled: true,

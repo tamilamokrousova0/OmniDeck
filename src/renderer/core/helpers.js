@@ -55,9 +55,16 @@ function setStatus(text) {
     showToast(safeText, 'error', 5000);
     return;
   }
+  // Подсказки «что сделать» (откройте чат, выберите аккаунт, аккаунт заморожен)
+  // раньше уходили мелким серым текстом в тулбар и терялись — показываем тостом.
+  const isHint = /^откройте|^выберите|^введите|^запустите|нет активного|не выбран|выберите шаблон|введите текст|нет текста|пустой|аккаунт заморожен|не готов|недоступн|ещё не загружено|только в /.test(lower);
+  if (isHint) {
+    showToast(safeText, 'warn', 4000);
+    return;
+  }
   // «обновлен(?!ие)»: слово «обновление» — это ПРОЦЕСС (загрузка идёт), и
   // каждый его процент раньше улетал отдельным тостом, выстраивая столбик
-  const isResult = /сохранен|сохранён|скопирован|удален|удалён|разморожен|отменен|отменён|вставлен|отправлено|обновлен(?!ие)|обновлён|сброшен|закреплён|откреплён/.test(lower);
+  const isResult = /сохранен|сохранён|скопирован|удален|удалён|заморожен|разморожен|отменен|отменён|вставлен|отправлено|обновлен(?!ие)|обновлён|сброшен|закреплён|откреплён/.test(lower);
   if (isResult) {
     showToast(safeText, 'success');
     return;
@@ -70,14 +77,26 @@ function showToast(text, type, duration) {
   if (typeof duration === 'undefined') duration = 3000;
   const container = document.getElementById('toast-container');
   if (!container) return;
+  const safeText = String(text || '');
+  if (!safeText) return;
+  const hide = function (el) {
+    el.classList.add('is-hiding');
+    setTimeout(function () { el.remove(); }, 260);
+  };
+  // Тот же текст уже на экране — продлеваем его, а не складываем столбик
+  // одинаковых тостов («Настройки сохранены» ×2 при двух быстрых правках).
+  for (const live of container.children) {
+    if (live.textContent === safeText && !live.classList.contains('is-hiding')) {
+      clearTimeout(live._hideTimer);
+      live._hideTimer = setTimeout(function () { hide(live); }, duration);
+      return;
+    }
+  }
   const toast = document.createElement('div');
   toast.className = 'toast' + (type === 'success' ? ' toast-success' : type === 'error' ? ' toast-error' : type === 'warn' ? ' toast-warn' : '');
-  toast.textContent = text;
+  toast.textContent = safeText;
   container.appendChild(toast);
-  setTimeout(function () {
-    toast.classList.add('is-hiding');
-    setTimeout(function () { toast.remove(); }, 260);
-  }, duration);
+  toast._hideTimer = setTimeout(function () { hide(toast); }, duration);
 }
 
 // ── Animated modal close ──

@@ -5,7 +5,6 @@ import { closeConfirm } from './helpers.js';
 import { selectedWebview, closeAccountContextMenu } from './accounts.js';
 import { closeAccountMenu } from './account-menu.js';
 import {
-  toggleTweaksPopover,
   showSettingsMenu,
   showSettingsSection,
   openSettingsPanel,
@@ -46,12 +45,6 @@ function handleEscapeUiReset() {
   if (isOpen(addPopover)) {
     addPopover.classList.add('hidden');
     document.getElementById('add-account')?.focus?.();
-    return true;
-  }
-  // 1. Floating Tweaks popover — the most shallow UI
-  const tweaksPanel = document.getElementById('tweaks-panel');
-  if (isOpen(tweaksPanel)) {
-    toggleTweaksPopover(false);
     return true;
   }
   // 2. Open context menus (account / refresh)

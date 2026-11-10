@@ -24,6 +24,7 @@ import {
   insertTextIntoActiveChat,
   applyHibernationSetting,
   applyZoom,
+  currentZoom,
 } from './webviews.js';
 import { updateHubDashboard, updateToolbarClock, updateHubClocks } from './hub.js';
 import {
@@ -167,8 +168,8 @@ async function init() {
         if (!hostInputFocused) refreshActiveWebview();
         return;
       }
-      if (c === 'Equal' || c === 'NumpadAdd') { applyZoom((Number(els.zoomSlider?.value) || 100) + 10); return; }
-      if (c === 'Minus' || c === 'NumpadSubtract') { applyZoom((Number(els.zoomSlider?.value) || 100) - 10); }
+      if (c === 'Equal' || c === 'NumpadAdd') { applyZoom(currentZoom() + 10); return; }
+      if (c === 'Minus' || c === 'NumpadSubtract') { applyZoom(currentZoom() - 10); }
     });
   }
 
@@ -224,7 +225,7 @@ async function init() {
   state.accounts = Array.isArray(boot.accounts) ? boot.accounts : [];
   state.settings = {
     uiTheme: normalizeTheme(boot.settings?.uiTheme || 'dark'),
-    weatherCity: WaDeckWeatherModule.normalizeWeatherCity(boot.settings?.weatherCity || 'Moscow'),
+    weatherCity: WaDeckWeatherModule.normalizeWeatherCity(boot.settings?.weatherCity || 'Москва'),
     weatherUnit: WaDeckWeatherModule.normalizeWeatherUnit(boot.settings?.weatherUnit || 'celsius'),
     lastSeenReleaseNotesVersion: String(boot.settings?.lastSeenReleaseNotesVersion || ''),
     translatorEnabled: boot.settings?.translatorEnabled !== false,

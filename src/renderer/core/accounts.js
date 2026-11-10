@@ -11,6 +11,7 @@ import {
   markAccountHibernated,
   isWebviewReady,
   safeExecuteInWebview,
+  probeLoginState,
 } from './webviews.js';
 import { updateHubDashboard } from './hub.js';
 import {
@@ -52,6 +53,11 @@ function updateToolbarState() {
   if (els.freezeActive) { els.freezeActive.disabled = !hasActive; els.freezeActive.style.display = ''; }
   if (els.openCrmModal) { els.openCrmModal.disabled = !isWa; els.openCrmModal.style.display = isWa || !hasActive ? '' : 'none'; }
   if (els.sendVoiceMsg) { els.sendVoiceMsg.disabled = !isWa; els.sendVoiceMsg.style.display = isWa || !hasActive ? '' : 'none'; }
+  // Масштаб относится к странице мессенджера: в хабе и у Signal менять нечего.
+  const canZoom = hasActive && account.type !== 'signal';
+  for (const btn of [els.zoomOut, els.zoomValue, els.zoomIn]) {
+    if (btn) btn.disabled = !canZoom;
+  }
 }
 
 function updateFreezeButtonState() {
@@ -127,6 +133,45 @@ function updateAccountActiveHighlight() {
   }
 }
 
+/* Единый источник статуса аккаунта для подсказки плитки, меню аккаунта и
+   хаба. «Подключён» означает только, что страница мессенджера загрузилась;
+   если на ней открыт экран входа (QR/номер телефона), это отдельный статус —
+   его выставляет probeLoginState в webview.dataset.needsLogin. */
+function accountStatusInfo(account) {
+  if (!account) return { kind: 'off', text: 'Не подключён' };
+  if (account.frozen) return { kind: 'frozen', text: 'Заморожен' };
+  if (account.type === 'signal') return { kind: 'ok', text: 'Приём через signal-cli' };
+  const wv = state.webviews.get(account.id);
+  if (!wv) return { kind: 'off', text: 'Не подключён' };
+  if (wv.dataset?.waReady !== '1') return { kind: 'loading', text: 'Загрузка…' };
+  if (wv.dataset?.needsLogin === '1') return { kind: 'login', text: 'Не выполнен вход' };
+  return { kind: 'ok', text: 'Подключён' };
+}
+
+function accountTypeLabel(account) {
+  return account?.type === 'telegram' ? 'Telegram' : (account?.type === 'signal' ? 'Signal' : 'WhatsApp');
+}
+
+function accountTooltipText(account) {
+  return account.name + ' — ' + accountTypeLabel(account) + ' — ' + accountStatusInfo(account).text;
+}
+
+/* Короткая подпись плитки. Имена вида «WP_1», «WP_2» по первым двум буквам
+   неразличимы — если у нескольких аккаунтов совпадает начало, показываем
+   хвост имени («1», «2»), иначе первые две буквы, как раньше. */
+function accountShortLabel(account) {
+  const name = String(account?.name || '').trim();
+  const fallback = account?.type === 'telegram' ? 'TG' : (account?.type === 'signal' ? 'SG' : 'WA');
+  if (!name) return fallback;
+  const head = name.slice(0, 2).toUpperCase();
+  const clash = (state.accounts || []).some((other) => other.id !== account.id
+    && String(other.name || '').trim().slice(0, 2).toUpperCase() === head);
+  if (!clash) return head;
+  const tail = name.match(/[\p{L}\p{N}]+$/u)?.[0] || '';
+  if (tail && tail.length < name.length) return tail.slice(-2).toUpperCase();
+  return head;
+}
+
 /** Update status dot + tooltip for a single account card (no full rebuild) */
 function updateAccountCardStatus(accountId) {
   const card = els.accountsList.querySelector(`.account-item[data-account-id="${accountId}"]`);
@@ -154,18 +199,9 @@ function updateAccountCardStatus(accountId) {
   // Update tooltip
   const tooltip = card.querySelector('.account-tooltip');
   if (tooltip) {
-    let tooltipStatus = '';
-    if (account.frozen) { tooltipStatus = 'Заморожен ❄'; }
-    else if (account.type === 'signal') { tooltipStatus = 'Приём через signal-cli'; }
-    else {
-      const wv = state.webviews.get(account.id);
-      if (!wv) tooltipStatus = 'Не подключён';
-      else if (wv.dataset?.waReady === '1') tooltipStatus = 'Подключён';
-      else tooltipStatus = 'Загрузка…';
-    }
-    const typeLabel = account.type === 'telegram' ? 'Telegram' : (account.type === 'signal' ? 'Signal' : 'WhatsApp');
-    tooltip.textContent = account.name + ' — ' + typeLabel + ' — ' + tooltipStatus;
+    tooltip.textContent = accountTooltipText(account);
   }
+  card.classList.toggle('needs-login', accountStatusInfo(account).kind === 'login');
 }
 
 function renderAccounts() {
@@ -231,7 +267,7 @@ function renderAccounts() {
 
     const label = document.createElement('span');
     label.className = 'account-label';
-    label.textContent = account.name.slice(0, 2).toUpperCase();
+    label.textContent = accountShortLabel(account);
     if (account.iconUrl) label.style.opacity = '0'; // hide text when icon set
 
     card.addEventListener('dblclick', (event) => {
@@ -296,20 +332,12 @@ function renderAccounts() {
     // Кастомный tooltip
     const tooltip = document.createElement('div');
     tooltip.className = 'account-tooltip';
-    let tooltipStatus = '';
-    if (account.frozen) {
-      tooltipStatus = 'Заморожен ❄';
-    } else if (account.type === 'signal') {
-      tooltipStatus = 'Приём через signal-cli';
-    } else {
-      const wv = state.webviews.get(account.id);
-      if (!wv) tooltipStatus = 'Не подключён';
-      else if (wv.dataset?.waReady === '1') tooltipStatus = 'Подключён';
-      else tooltipStatus = 'Загрузка…';
-    }
-    const typeLabel = account.type === 'telegram' ? 'Telegram' : (account.type === 'signal' ? 'Signal' : 'WhatsApp');
-    tooltip.textContent = account.name + ' — ' + typeLabel + ' — ' + tooltipStatus;
+    tooltip.textContent = accountTooltipText(account);
     card.appendChild(tooltip);
+    card.classList.toggle('needs-login', accountStatusInfo(account).kind === 'login');
+    // Вход в WhatsApp/Telegram происходит без перезагрузки страницы — перед
+    // показом подсказки перепроверяем, не открыт ли всё ещё экран входа.
+    card.addEventListener('mouseenter', () => probeLoginState(account.id));
 
     // Контекстное меню (правый клик)
     card.addEventListener('contextmenu', (e) => {
@@ -545,16 +573,9 @@ function _setActiveAccountInner(accountId) {
   syncZoomSlider();
   WaDeckUnreadModule.updateActiveUnreadIndicator();
   refreshWebviewVisibility();
-  const account = activeAccount();
-  if (account) {
-    if (account.frozen) {
-      setStatus(`Аккаунт: ${account.name} (заморожен)`);
-    } else {
-      setStatus(`Аккаунт: ${account.name}`);
-    }
-  } else {
-    setStatus('Нет активного аккаунта');
-  }
+  // Имя и состояние активного аккаунта показывает плашка в тулбаре —
+  // дублировать их строкой статуса рядом не нужно.
+  probeLoginState(state.activeAccountId);
   WaDeckUnreadModule.scheduleDockBadgeSync();
   // Автофокус композера: после Cmd+N печатать можно сразу, без клика мышью.
   // Тихий no-op, если чат не открыт или webview ещё не готов (гибернация).
@@ -733,6 +754,9 @@ export {
   reorderAccountsByDrag,
   updateAccountActiveHighlight,
   updateAccountCardStatus,
+  accountStatusInfo,
+  accountTypeLabel,
+  accountShortLabel,
   renderAccounts,
   updateSidebarScrollControls,
   scrollAccountsList,

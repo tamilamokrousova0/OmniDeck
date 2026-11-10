@@ -2,8 +2,7 @@
    the toolbar clock tooltip. Extracted verbatim from renderer.js. */
 import { state, els } from './state.js';
 import { brandIconSvg } from './brand-icons.js';
-import { setActiveAccount, addAccount } from './accounts.js';
-import { openSettingsPanel, closeSettingsPanel } from './settings.js';
+import { setActiveAccount, addAccount, accountStatusInfo, accountTypeLabel, accountShortLabel } from './accounts.js';
 
 function setHubVisibility(visible) {
   if (!els.webviews || !els.hubScreen) return;
@@ -247,7 +246,7 @@ async function updateHubDashboard() {
     empty.className = 'hub-empty';
     empty.textContent = state.accounts.length
       ? 'Ничего не найдено по текущему фильтру'
-      : 'Пока нет аккаунтов — добавьте WhatsApp или Telegram';
+      : 'Пока нет аккаунтов — добавьте первый';
     container.appendChild(empty);
   }
 
@@ -267,8 +266,7 @@ async function updateHubDashboard() {
     avWrap.className = 'hub-acct-av';
     avWrap.style.background = account.color || 'var(--bg-3)';
     avWrap.style.setProperty('--tile', account.color || '#8a93a6');
-    const labelText = (account.name || '').split(' ')[0].slice(0, 2).toUpperCase() || (account.type === 'telegram' ? 'TG' : (account.type === 'signal' ? 'SG' : 'WA'));
-    avWrap.textContent = labelText;
+    avWrap.textContent = accountShortLabel(account);
     if (account.frozen) {
       const status = document.createElement('span');
       status.className = 'hub-acct-status frozen';
@@ -292,22 +290,18 @@ async function updateHubDashboard() {
       row1.appendChild(badge);
     }
 
-    const preview = document.createElement('div');
-    preview.className = 'hub-acct-preview';
-    preview.textContent = account.frozen ? '❄ заморожен' : '';
-
-    const row3 = document.createElement('div');
-    row3.className = 'hub-acct-row3';
-    const typeTag = document.createElement('span');
-    typeTag.className = 'hub-acct-tag hub-acct-tag-' + (account.type === 'telegram' ? 'blue' : (account.type === 'signal' ? 'violet' : 'accent'));
-    typeTag.textContent = account.type === 'telegram' ? 'Telegram' : (account.type === 'signal' ? 'Signal' : 'WhatsApp');
-    row3.appendChild(typeTag);
-    if (account.frozen) {
-      const t = document.createElement('span');
-      t.className = 'hub-acct-tag hub-acct-tag-warn';
-      t.textContent = 'Заморожен';
-      row3.appendChild(t);
-    }
+    // Вторая строка: мессенджер и состояние аккаунта простым текстом.
+    const status = accountStatusInfo(account);
+    const sub = document.createElement('div');
+    sub.className = 'hub-acct-sub';
+    sub.dataset.kind = status.kind;
+    const typeEl = document.createElement('span');
+    typeEl.className = 'hub-acct-type';
+    typeEl.textContent = accountTypeLabel(account);
+    const stateEl = document.createElement('span');
+    stateEl.className = 'hub-acct-state';
+    stateEl.textContent = status.text;
+    sub.append(typeEl, stateEl);
 
     if (isPinned) {
       const pin = document.createElement('span');
@@ -317,7 +311,7 @@ async function updateHubDashboard() {
       card.appendChild(pin);
     }
 
-    info.append(row1, preview, row3);
+    info.append(row1, sub);
     card.append(bar, avWrap, info);
     return card;
   };
@@ -339,47 +333,29 @@ async function updateHubDashboard() {
     container.appendChild(buildHubAccountCard(account, { isPinned: false }));
   }
 
-  // Кнопки — отрисовываем в отдельный ряд под сеткой аккаунтов, чтобы
-  // они не попадали в тот же grid и не растягивали последнюю карточку.
+  // Кнопки добавления — только в пустом хабе. Когда аккаунты есть, новый
+  // добавляется кнопкой «+» под плитками, а настройки — шестерёнкой сверху.
   const actionsHost = document.getElementById('hub-actions-row') || container;
   actionsHost.innerHTML = '';
+  if (state.accounts.length) return;
   const actions = document.createElement('div');
   actions.className = 'hub-actions';
-
-  const addWaBtn = document.createElement('button');
-  addWaBtn.className = 'btn hub-action-btn hub-action-wa hub-action-primary';
-  addWaBtn.type = 'button';
-  addWaBtn.title = 'Добавить WhatsApp-аккаунт';
-  addWaBtn.setAttribute('aria-label', 'Добавить WhatsApp-аккаунт');
-  addWaBtn.innerHTML = brandIconSvg('whatsapp', { size: 13, color: 'currentColor' }) + ' Добавить WhatsApp';
-  addWaBtn.addEventListener('click', () => addAccount('whatsapp'));
-
-  const addTgBtn = document.createElement('button');
-  addTgBtn.className = 'btn btn-ghost hub-action-btn hub-action-tg';
-  addTgBtn.type = 'button';
-  addTgBtn.title = 'Добавить Telegram-аккаунт';
-  addTgBtn.setAttribute('aria-label', 'Добавить Telegram-аккаунт');
-  addTgBtn.innerHTML = brandIconSvg('telegram', { size: 13, color: '#2AABEE' }) + ' Добавить Telegram';
-  addTgBtn.addEventListener('click', () => addAccount('telegram'));
-
-  const addSgBtn = document.createElement('button');
-  addSgBtn.className = 'btn btn-ghost hub-action-btn hub-action-sig';
-  addSgBtn.type = 'button';
-  addSgBtn.title = 'Добавить Signal-аккаунт (уведомления через signal-cli)';
-  addSgBtn.setAttribute('aria-label', 'Добавить Signal-аккаунт');
-  addSgBtn.innerHTML = brandIconSvg('signal', { size: 13, color: '#3A76F0' }) + ' Добавить Signal';
-  addSgBtn.addEventListener('click', () => addAccount('signal'));
-
-  const settingsBtn = document.createElement('button');
-  settingsBtn.className = 'btn btn-ghost hub-action-btn hub-action-settings';
-  settingsBtn.title = 'Настройки';
-  settingsBtn.setAttribute('aria-label', 'Настройки');
-  settingsBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
-  settingsBtn.addEventListener('click', () => { if (state.panelHidden) openSettingsPanel(); else closeSettingsPanel(); });
-
-  actions.append(addWaBtn, addTgBtn, addSgBtn, settingsBtn);
+  const kinds = [
+    ['whatsapp', 'WhatsApp', 'btn btn-primary', 'currentColor'],
+    ['telegram', 'Telegram', 'btn', '#2AABEE'],
+    ['signal', 'Signal', 'btn', '#3A76F0'],
+  ];
+  for (const [type, label, className, iconColor] of kinds) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `${className} hub-action-btn`;
+    if (type === 'signal') btn.title = 'Уведомления через signal-cli';
+    btn.innerHTML = brandIconSvg(type, { size: 14, color: iconColor });
+    btn.append(` Добавить ${label}`);
+    btn.addEventListener('click', () => addAccount(type));
+    actions.appendChild(btn);
+  }
   actionsHost.appendChild(actions);
-
 }
 
 function openHubMode() {

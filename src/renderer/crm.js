@@ -100,7 +100,7 @@ import { activeChatContactScript } from './webview-scripts/active-chat-contact.j
 
     const contactName = await getActiveChatContactName();
     if (!contactName) {
-      setStatus('Откройте нужный чат, затем CRM');
+      setStatus('Откройте чат — заметки открываются для контакта из открытого чата');
       return;
     }
 

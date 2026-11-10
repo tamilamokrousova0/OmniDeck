@@ -154,7 +154,6 @@ const els = {
   confirmCancel: document.getElementById('confirm-cancel'),
   confirmClose: document.getElementById('confirm-close'),
 
-  zoomSlider: document.getElementById('zoom-slider'),
   zoomOut: document.getElementById('zoom-out'),
   zoomIn: document.getElementById('zoom-in'),
   zoomValue: document.getElementById('zoom-value'),

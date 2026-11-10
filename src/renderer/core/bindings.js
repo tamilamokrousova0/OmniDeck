@@ -29,6 +29,7 @@ import {
 } from './account-menu.js';
 import {
   applyZoom,
+  currentZoom,
   sendAudioAsVoiceMessage,
   applyTranslatorToggleToAllWebviews,
   applyCrmHoverToggle,
@@ -39,8 +40,7 @@ import {
   applyTheme,
   normalizeTileMode,
   applyTileMode,
-  refreshTweakPills,
-  toggleTweaksPopover,
+  refreshAppearanceControls,
   openSettingsPanel,
   closeSettingsPanel,
   showSettingsMenu,
@@ -65,7 +65,16 @@ function bindActions() {
   const addPopover = document.getElementById('add-account-popover');
   els.addAccount.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (addPopover) addPopover.classList.toggle('hidden');
+    if (!addPopover) return;
+    const willOpen = addPopover.classList.contains('hidden');
+    addPopover.classList.toggle('hidden', !willOpen);
+    if (!willOpen) return;
+    // Меню с подписями шире сайдбара (у того overflow: hidden) — ставим его
+    // фиксированно справа от «+» и не даём уйти за нижний край окна.
+    const rect = els.addAccount.getBoundingClientRect();
+    const top = Math.max(8, Math.min(rect.top, window.innerHeight - addPopover.offsetHeight - 8));
+    addPopover.style.left = `${Math.round(rect.right + 8)}px`;
+    addPopover.style.top = `${Math.round(top)}px`;
   });
   if (addPopover) {
     for (const btn of addPopover.querySelectorAll('.add-account-option')) {
@@ -129,47 +138,26 @@ function bindActions() {
   // Back button in settings header
   els.settingsBack?.addEventListener('click', () => showSettingsMenu());
 
-  // Tweaks: theme / scene / density pills
-  document.querySelectorAll('.tweak-pill[data-theme]').forEach((btn) => {
+  // Оформление: тема и стиль плиток (Настройки → Интерфейс)
+  document.querySelectorAll('.seg-btn[data-theme]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const next = btn.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
       if (normalizeTheme(state.settings?.uiTheme || 'dark') === next) return;
       state.settings = { ...(state.settings || {}), uiTheme: next };
       applyTheme(next);
-      refreshTweakPills();
+      refreshAppearanceControls();
       try { await saveSettings(); } catch {}
     });
   });
-  document.querySelectorAll('.tweak-pill[data-tiles]').forEach((btn) => {
+  document.querySelectorAll('.seg-btn[data-tiles]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const next = normalizeTileMode(btn.getAttribute('data-tiles'));
       if (normalizeTileMode(state.settings?.uiTiles) === next) return;
       state.settings = { ...(state.settings || {}), uiTiles: next };
       applyTileMode(next);
-      refreshTweakPills();
+      refreshAppearanceControls();
       try { await saveSettings(); } catch {}
     });
-  });
-
-  document.getElementById('tweaks-collapse')?.addEventListener('click', () => {
-    // In floating mode, "свернуть" simply closes the popover
-    toggleTweaksPopover(false);
-  });
-
-  // Floating Tweaks: FAB click toggles the popover
-  document.getElementById('tweaks-fab')?.addEventListener('click', (event) => {
-    event.stopPropagation();
-    toggleTweaksPopover();
-  });
-
-  // Close Tweaks popover on any click that lands outside of it or the FAB
-  document.addEventListener('click', (event) => {
-    const panel = document.getElementById('tweaks-panel');
-    if (!panel || panel.classList.contains('hidden')) return;
-    const fab = document.getElementById('tweaks-fab');
-    if (event.target.closest('#tweaks-panel')) return;
-    if (fab && event.target.closest('#tweaks-fab')) return;
-    toggleTweaksPopover(false);
   });
 
   // Weather settings: auto-save on change (no explicit button).
@@ -260,16 +248,10 @@ function bindActions() {
     });
   }
 
-  /* Zoom controls */
-  els.zoomSlider?.addEventListener('input', () => {
-    applyZoom(Number(els.zoomSlider.value) || 100);
-  });
-  els.zoomIn?.addEventListener('click', () => {
-    applyZoom((Number(els.zoomSlider?.value) || 100) + 10);
-  });
-  els.zoomOut?.addEventListener('click', () => {
-    applyZoom((Number(els.zoomSlider?.value) || 100) - 10);
-  });
+  /* Zoom controls: «−», процент (клик — сброс до 100%), «+» */
+  els.zoomIn?.addEventListener('click', () => applyZoom(currentZoom() + 10));
+  els.zoomOut?.addEventListener('click', () => applyZoom(currentZoom() - 10));
+  els.zoomValue?.addEventListener('click', () => applyZoom(100));
 
   /* Clocks settings — toggle add form */
   els.clockAddToggle?.addEventListener('click', () => {
@@ -353,7 +335,7 @@ function bindActions() {
     try {
       await saveSettings();
       refreshSettingsMenuSubtitles();
-      setStatus(enabled ? 'Hover-меню CRM включено' : 'Hover-меню CRM отключено');
+      setStatus(enabled ? 'Заметки при наведении включены' : 'Заметки при наведении отключены');
     } catch {
       event.target.checked = isCrmHoverEnabled();
     }
@@ -364,7 +346,7 @@ function bindActions() {
     state.settings = { ...(state.settings || {}), translateBatchEnabled: enabled };
     try {
       await saveSettings();
-      setStatus(enabled ? 'Батч-перевод включён' : 'Батч-перевод отключён');
+      setStatus(enabled ? 'Перевод пачкой включён' : 'Перевод пачкой отключён');
     } catch {
       setStatus('Не удалось сохранить настройку');
     }

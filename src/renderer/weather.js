@@ -15,7 +15,9 @@
   }
 
   function normalizeWeatherCity(value) {
-    return String(value || '').trim() || 'Moscow';
+    const city = String(value || '').trim();
+    // «Moscow» — прежнее значение по умолчанию; в русском интерфейсе показываем по-русски.
+    return !city || city === 'Moscow' ? 'Москва' : city;
   }
 
   function weatherUnitSuffix(unit) {

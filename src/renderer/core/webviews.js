@@ -12,7 +12,7 @@ import {
 } from './helpers.js';
 import { accountById, selectedWebview, activeAccount, updateAccountCardStatus } from './accounts.js';
 import { setHubVisibility, updateHubDashboard } from './hub.js';
-import { isTranslatorEnabled, isCrmHoverEnabled, refreshTweaksFabVisibility, saveSettings } from './settings.js';
+import { isTranslatorEnabled, isCrmHoverEnabled, saveSettings } from './settings.js';
 import { handleCrmHover, hideCrmHoverPopover } from './crm-hover.js';
 import { WaDeckUnreadModule } from '../unread.js';
 import { keepAliveScript } from '../webview-scripts/keep-alive.js';
@@ -94,8 +94,18 @@ function applyZoom(percent) {
   if (state.activeAccountId) {
     state.zoomByAccount.set(state.activeAccountId, clamped);
   }
-  if (els.zoomSlider) els.zoomSlider.value = String(clamped);
-  if (els.zoomValue) els.zoomValue.textContent = clamped + '%';
+  showZoomValue(clamped);
+}
+
+/* Текущий масштаб активного аккаунта (100, если аккаунта нет). */
+function currentZoom() {
+  return state.zoomByAccount.get(state.activeAccountId) || 100;
+}
+
+function showZoomValue(zoom) {
+  if (!els.zoomValue) return;
+  els.zoomValue.textContent = zoom + '%';
+  els.zoomValue.classList.toggle('is-changed', zoom !== 100);
 }
 
 function syncZoomSlider() {
@@ -122,8 +132,7 @@ function syncZoomSlider() {
       state.zoomByAccount.set(id, zoom);
     }
   }
-  if (els.zoomSlider) els.zoomSlider.value = String(zoom);
-  if (els.zoomValue) els.zoomValue.textContent = zoom + '%';
+  showZoomValue(zoom);
 }
 
 // Debug helper — run from main-window DevTools: await window.__wadeckProbeChat()
@@ -382,6 +391,10 @@ function ensureWebview(account) {
       updateAccountCardStatus(accountId);
       updateHubDashboard();
     }, 300);
+    // SPA мессенджера дорисовывает экран входа или список чатов не сразу.
+    for (const delay of [2500, 8000, 20000]) {
+      setTimeout(() => probeLoginState(accountId), delay);
+    }
   };
 
   const onNavigateInPage = () => {
@@ -660,6 +673,36 @@ function safeExecuteInWebview(webview, script, userGesture = true) {
   }
 }
 
+/* Экран входа (QR / номер телефона) вместо чатов. Страница при этом загружена,
+   и одного waReady мало, чтобы писать «Подключён». Признак только
+   положительный: needsLogin ставится, когда экран входа найден явно, — при
+   смене вёрстки мессенджера статус откатится к прежнему «Подключён», а не
+   начнёт врать в обратную сторону. */
+const LOGIN_PROBE_SCRIPTS = {
+  whatsapp: `(() => !document.querySelector('#pane-side')
+    && !!document.querySelector('#link-device-instructions-list, canvas[aria-label], [data-ref]'))()`,
+  telegram: `(() => {
+    let authed = false;
+    try { authed = !!localStorage.getItem('user_auth'); } catch (e) {}
+    return !authed && !!document.querySelector('#auth-pages, .page-sign, .page-signQR, #auth-qr-form, #auth-phone-number-form, .auth-form');
+  })()`,
+};
+
+function probeLoginState(accountId) {
+  const account = accountById(accountId);
+  const webview = state.webviews.get(accountId);
+  const script = account && LOGIN_PROBE_SCRIPTS[account.type];
+  if (!script || !webview || !isWebviewReady(webview)) return;
+  safeExecuteInWebview(webview, script, false).then((needsLogin) => {
+    if (typeof needsLogin !== 'boolean') return;
+    const flag = needsLogin ? '1' : '0';
+    if (webview.dataset.needsLogin === flag) return;
+    webview.dataset.needsLogin = flag;
+    updateAccountCardStatus(accountId);
+    updateHubDashboard();
+  });
+}
+
 function showWebviewLoading(show) {
   let overlay = els.webviews.querySelector('.webview-loading-overlay');
   if (show) {
@@ -782,7 +825,6 @@ function refreshWebviewVisibility() {
     }
   }
   showWebviewLoading(!showHub && activeLoading);
-  refreshTweaksFabVisibility();
 }
 
 /* Флаг активности живёт в JS-контексте гостя и исчезает при reload, а
@@ -1105,11 +1147,13 @@ async function sendAudioAsVoiceMessage() {
 
 export {
   applyZoom,
+  currentZoom,
   syncZoomSlider,
   cleanupWebview,
   ensureWebview,
   isWebviewReady,
   safeExecuteInWebview,
+  probeLoginState,
   showWebviewLoading,
   applyHibernationSetting,
   runHibernationTick,

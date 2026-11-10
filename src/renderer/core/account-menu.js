@@ -4,6 +4,8 @@ import { state, els } from './state.js';
 import { setStatus, closeModalAnimated } from './helpers.js';
 import {
   accountById,
+  accountStatusInfo,
+  accountShortLabel,
   patchLocalAccount,
   renderAccounts,
   activeAccount,
@@ -11,7 +13,7 @@ import {
   updateToolbarState,
   updateActiveAccountDisplay,
 } from './accounts.js';
-import { cleanupWebview, ensureWebview, refreshWebviewVisibility } from './webviews.js';
+import { cleanupWebview, ensureWebview, refreshWebviewVisibility, probeLoginState } from './webviews.js';
 import { updateHubDashboard } from './hub.js';
 import { WaDeckUnreadModule } from '../unread.js';
 
@@ -34,22 +36,17 @@ function openAccountMenu(accountId) {
       img.alt = account.name;
       els.accountMenuChip.appendChild(img);
     } else {
-      els.accountMenuChip.textContent = account.name.slice(0, 2).toUpperCase();
+      els.accountMenuChip.textContent = accountShortLabel(account);
     }
   }
 
   // Status line
   if (els.accountMenuStatus) {
-    let statusText = '';
-    if (account.frozen) {
-      statusText = '❄ Заморожен';
-    } else {
-      const wv = state.webviews.get(account.id);
-      if (!wv) statusText = '○ Не подключён';
-      else if (wv.dataset?.waReady === '1') statusText = '● Подключён';
-      else statusText = '◌ Загрузка…';
-    }
-    els.accountMenuStatus.textContent = statusText;
+    const info = accountStatusInfo(account);
+    const marks = { frozen: '❄', ok: '●', login: '○', off: '○', loading: '◌' };
+    els.accountMenuStatus.textContent = `${marks[info.kind] || '○'} ${info.text}`;
+    els.accountMenuStatus.dataset.kind = info.kind;
+    probeLoginState(account.id);
   }
 
   // Freeze toggle — flips is-active + textual state

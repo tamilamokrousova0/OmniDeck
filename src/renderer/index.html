@@ -31,16 +31,16 @@
           </svg>
         </button>
         <div class="add-account-wrap">
-          <button type="button" id="add-account" class="btn btn-ghost add-account-btn" title="Добавить аккаунт">+</button>
-          <div id="add-account-popover" class="add-account-popover hidden">
-            <button type="button" class="add-account-option" data-type="whatsapp" title="WhatsApp">
-              <svg class="icon-wa-mini" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+          <button type="button" id="add-account" class="btn btn-ghost add-account-btn" title="Добавить аккаунт" aria-label="Добавить аккаунт" aria-haspopup="menu">+</button>
+          <div id="add-account-popover" class="add-account-popover hidden" role="menu" aria-label="Добавить аккаунт">
+            <button type="button" class="add-account-option" data-type="whatsapp" role="menuitem" title="WhatsApp">
+              <svg class="icon-wa-mini" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg><span class="add-account-option-label">WhatsApp</span>
             </button>
-            <button type="button" class="add-account-option" data-type="telegram" title="Telegram">
-              <svg class="icon-tg-mini" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+            <button type="button" class="add-account-option" data-type="telegram" role="menuitem" title="Telegram">
+              <svg class="icon-tg-mini" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg><span class="add-account-option-label">Telegram</span>
             </button>
-            <button type="button" class="add-account-option" data-type="signal" title="Signal (уведомления через signal-cli)">
-              <svg class="icon-sig-mini" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0q-.934 0-1.83.139l.17 1.111a11 11 0 0 1 3.32 0l.172-1.111A12 12 0 0 0 12 0M9.152.34A12 12 0 0 0 5.77 1.742l.584.961a10.8 10.8 0 0 1 3.066-1.27zm5.696 0-.268 1.094a10.8 10.8 0 0 1 3.066 1.27l.584-.962A12 12 0 0 0 14.848.34M12 2.25a9.75 9.75 0 0 0-8.539 14.459c.074.134.1.292.064.441l-1.013 4.338 4.338-1.013a.62.62 0 0 1 .441.064A9.7 9.7 0 0 0 12 21.75c5.385 0 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25m-7.092.068a12 12 0 0 0-2.59 2.59l.909.664a11 11 0 0 1 2.345-2.345zm14.184 0-.664.909a11 11 0 0 1 2.345 2.345l.909-.664a12 12 0 0 0-2.59-2.59M1.742 5.77A12 12 0 0 0 .34 9.152l1.094.268a10.8 10.8 0 0 1 1.269-3.066zm20.516 0-.961.584a10.8 10.8 0 0 1 1.27 3.066l1.093-.268a12 12 0 0 0-1.402-3.383M.138 10.168A12 12 0 0 0 0 12q0 .934.139 1.83l1.111-.17A11 11 0 0 1 1.125 12q0-.848.125-1.66zm23.723.002-1.111.17q.125.812.125 1.66c0 .848-.042 1.12-.125 1.66l1.111.172a12.1 12.1 0 0 0 0-3.662M1.434 14.58l-1.094.268a12 12 0 0 0 .96 2.591l-.265 1.14 1.096.255.36-1.539-.188-.365a10.8 10.8 0 0 1-.87-2.35m21.133 0a10.8 10.8 0 0 1-1.27 3.067l.962.584a12 12 0 0 0 1.402-3.383zm-1.793 3.848a11 11 0 0 1-2.345 2.345l.664.909a12 12 0 0 0 2.59-2.59zm-19.959 1.1L.357 21.48a1.8 1.8 0 0 0 2.162 2.161l1.954-.455-.256-1.095-1.953.455a.675.675 0 0 1-.81-.81l.454-1.954zm16.832 1.769a10.8 10.8 0 0 1-3.066 1.27l.268 1.093a12 12 0 0 0 3.382-1.402zm-10.94.213-1.54.36.256 1.095 1.139-.266c.814.415 1.683.74 2.591.961l.268-1.094a10.8 10.8 0 0 1-2.35-.869zm3.634 1.24-.172 1.111a12.1 12.1 0 0 0 3.662 0l-.17-1.111q-.812.125-1.66.125a11 11 0 0 1-1.66-.125"/></svg>
+            <button type="button" class="add-account-option" data-type="signal" role="menuitem" title="Signal (уведомления через signal-cli)">
+              <svg class="icon-sig-mini" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0q-.934 0-1.83.139l.17 1.111a11 11 0 0 1 3.32 0l.172-1.111A12 12 0 0 0 12 0M9.152.34A12 12 0 0 0 5.77 1.742l.584.961a10.8 10.8 0 0 1 3.066-1.27zm5.696 0-.268 1.094a10.8 10.8 0 0 1 3.066 1.27l.584-.962A12 12 0 0 0 14.848.34M12 2.25a9.75 9.75 0 0 0-8.539 14.459c.074.134.1.292.064.441l-1.013 4.338 4.338-1.013a.62.62 0 0 1 .441.064A9.7 9.7 0 0 0 12 21.75c5.385 0 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25m-7.092.068a12 12 0 0 0-2.59 2.59l.909.664a11 11 0 0 1 2.345-2.345zm14.184 0-.664.909a11 11 0 0 1 2.345 2.345l.909-.664a12 12 0 0 0-2.59-2.59M1.742 5.77A12 12 0 0 0 .34 9.152l1.094.268a10.8 10.8 0 0 1 1.269-3.066zm20.516 0-.961.584a10.8 10.8 0 0 1 1.27 3.066l1.093-.268a12 12 0 0 0-1.402-3.383M.138 10.168A12 12 0 0 0 0 12q0 .934.139 1.83l1.111-.17A11 11 0 0 1 1.125 12q0-.848.125-1.66zm23.723.002-1.111.17q.125.812.125 1.66c0 .848-.042 1.12-.125 1.66l1.111.172a12.1 12.1 0 0 0 0-3.662M1.434 14.58l-1.094.268a12 12 0 0 0 .96 2.591l-.265 1.14 1.096.255.36-1.539-.188-.365a10.8 10.8 0 0 1-.87-2.35m21.133 0a10.8 10.8 0 0 1-1.27 3.067l.962.584a12 12 0 0 0 1.402-3.383zm-1.793 3.848a11 11 0 0 1-2.345 2.345l.664.909a12 12 0 0 0 2.59-2.59zm-19.959 1.1L.357 21.48a1.8 1.8 0 0 0 2.162 2.161l1.954-.455-.256-1.095-1.953.455a.675.675 0 0 1-.81-.81l.454-1.954zm16.832 1.769a10.8 10.8 0 0 1-3.066 1.27l.268 1.093a12 12 0 0 0 3.382-1.402zm-10.94.213-1.54.36.256 1.095 1.139-.266c.814.415 1.683.74 2.591.961l.268-1.094a10.8 10.8 0 0 1-2.35-.869zm3.634 1.24-.172 1.111a12.1 12.1 0 0 0 3.662 0l-.17-1.111q-.812.125-1.66.125a11 11 0 0 1-1.66-.125"/></svg><span class="add-account-option-label">Signal</span>
             </button>
           </div>
         </div>
@@ -116,15 +116,14 @@
           </div>
           <div class="toolbar-right">
             <div id="active-account-display" class="active-account-display" title="Активный аккаунт">Нет активного аккаунта</div>
-            <div class="zoom-control">
-              <button type="button" id="zoom-out" class="btn btn-icon btn-toolbar-icon btn-zoom" title="Уменьшить масштаб" aria-label="Уменьшить масштаб">
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>
+            <div class="zoom-control" role="group" aria-label="Масштаб">
+              <button type="button" id="zoom-out" class="btn btn-zoom" title="Уменьшить масштаб" aria-label="Уменьшить масштаб">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>
               </button>
-              <input id="zoom-slider" type="range" min="50" max="150" value="100" step="5" class="zoom-slider" title="Масштаб" />
-              <button type="button" id="zoom-in" class="btn btn-icon btn-toolbar-icon btn-zoom" title="Увеличить масштаб" aria-label="Увеличить масштаб">
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              <button type="button" id="zoom-value" class="btn zoom-value" title="Сбросить масштаб до 100%">100%</button>
+              <button type="button" id="zoom-in" class="btn btn-zoom" title="Увеличить масштаб" aria-label="Увеличить масштаб">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
               </button>
-              <span id="zoom-value" class="zoom-value">100%</span>
             </div>
             <div id="active-unread" class="unread-indicator hidden" title="Непрочитанные сообщения">
               <span class="unread-icon">●</span>
@@ -209,7 +208,6 @@
         <div class="panel-body">
         <!-- === Settings MENU (top-level list) === -->
         <div id="settings-view-menu" class="settings-view settings-view-menu">
-          <div class="settings-group-label">Настройки</div>
           <div class="settings-menu-list">
             <button type="button" class="settings-menu-item" data-open="templates">
               <span class="settings-menu-ico">
@@ -274,7 +272,7 @@
               </span>
               <span class="settings-menu-text">
                 <span class="settings-menu-title">Интерфейс</span>
-                <span class="settings-menu-sub" data-sub="interface">переводчик · CRM hover</span>
+                <span class="settings-menu-sub" data-sub="interface">тема · переводчик</span>
               </span>
               <span class="settings-menu-arrow" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
@@ -299,10 +297,29 @@
         <section class="settings-section" data-settings-section="interface">
         <details class="card card-collapsible" id="interface-settings-card" open>
           <summary>Интерфейс</summary>
+          <div class="toggle-row">
+            <span class="toggle-row-text">
+              <span class="toggle-row-title">Тема</span>
+            </span>
+            <div class="seg-control" role="group" aria-label="Тема">
+              <button type="button" class="seg-btn" data-theme="dark">Тёмная</button>
+              <button type="button" class="seg-btn" data-theme="light">Светлая</button>
+            </div>
+          </div>
+          <div class="toggle-row">
+            <span class="toggle-row-text">
+              <span class="toggle-row-title">Плитки аккаунтов</span>
+              <span class="toggle-row-hint">«Спокойные» приглушают выбранные цвета, чтобы значки и счётчики читались на любом цвете.</span>
+            </span>
+            <div class="seg-control" role="group" aria-label="Плитки аккаунтов">
+              <button type="button" class="seg-btn" data-tiles="raw">Яркие</button>
+              <button type="button" class="seg-btn" data-tiles="calm">Спокойные</button>
+            </div>
+          </div>
           <label class="toggle-row">
             <span class="toggle-row-text">
               <span class="toggle-row-title">Переводчик в чатах</span>
-              <span class="toggle-row-hint">Панель перевода над полем ввода и автоперевод входящих. Отключение удалит бар во всех открытых чатах.</span>
+              <span class="toggle-row-hint">Панель перевода над полем ввода и автоперевод входящих. Если отключить, панель исчезнет во всех открытых чатах.</span>
             </span>
             <span class="toggle-switch">
               <input id="setting-translator-enabled" type="checkbox" />
@@ -311,7 +328,7 @@
           </label>
           <label class="toggle-row">
             <span class="toggle-row-text">
-              <span class="toggle-row-title">Батч-перевод входящих</span>
+              <span class="toggle-row-title">Перевод входящих пачкой</span>
               <span class="toggle-row-hint">Переводить пачку видимых сообщений одним запросом — быстрее и экономит лимит. Отключите, если переводы стали путаться между сообщениями.</span>
             </span>
             <span class="toggle-switch">
@@ -321,8 +338,8 @@
           </label>
           <label class="toggle-row">
             <span class="toggle-row-text">
-              <span class="toggle-row-title">Hover-меню CRM</span>
-              <span class="toggle-row-hint">Всплывающая карточка CRM при наведении на контакт в списке. Отключение оставит доступ к CRM только по кнопке в тулбаре.</span>
+              <span class="toggle-row-title">Заметка о контакте при наведении</span>
+              <span class="toggle-row-hint">Всплывающая карточка с вашей заметкой при наведении на чат в списке. Если отключить, заметки останутся доступны по кнопке «Контакты» на верхней панели.</span>
             </span>
             <span class="toggle-switch">
               <input id="setting-crm-hover-enabled" type="checkbox" />
@@ -408,7 +425,7 @@
             </select>
           </label>
           <button type="button" id="wsettings-refresh" class="btn full">Обновить сейчас</button>
-          <div class="hint">Изменения сохраняются автоматически. Погода показывается в тулбаре сверху и обновляется раз в 10 минут.</div>
+          <div class="hint">Изменения сохраняются автоматически. Погода показывается на верхней панели и обновляется раз в 10 минут.</div>
         </details>
         </section>
 
@@ -603,65 +620,6 @@
       </div>
     </div>
 
-
-    <!-- Floating Tweaks widget (theme + scene), bottom-right corner -->
-    <button type="button" id="tweaks-fab" class="tweaks-fab" title="Оформление">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="4" y1="21" x2="4" y2="14"/>
-        <line x1="4" y1="10" x2="4" y2="3"/>
-        <line x1="12" y1="21" x2="12" y2="12"/>
-        <line x1="12" y1="8" x2="12" y2="3"/>
-        <line x1="20" y1="21" x2="20" y2="16"/>
-        <line x1="20" y1="12" x2="20" y2="3"/>
-        <line x1="1" y1="14" x2="7" y2="14"/>
-        <line x1="9" y1="8" x2="15" y2="8"/>
-        <line x1="17" y1="16" x2="23" y2="16"/>
-      </svg>
-    </button>
-
-    <div id="tweaks-panel" class="tweaks-panel tweaks-panel-floating hidden">
-      <div class="tweaks-head">
-        <span class="tweaks-head-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
-            <line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
-            <line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
-            <line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/>
-            <line x1="17" y1="16" x2="23" y2="16"/>
-          </svg>
-        </span>
-        <span class="tweaks-head-title">TWEAKS</span>
-        <button type="button" id="tweaks-collapse" class="tweaks-collapse-btn">свернуть</button>
-      </div>
-      <div class="tweaks-body" id="tweaks-body">
-        <div class="tweaks-group">
-          <div class="tweaks-label">ТЕМА</div>
-          <div class="tweaks-pills" data-group="theme">
-            <button type="button" class="tweak-pill" data-theme="dark">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79Z"/></svg>
-              <span>Тёмная</span>
-            </button>
-            <button type="button" class="tweak-pill" data-theme="light">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-              <span>Светлая</span>
-            </button>
-          </div>
-        </div>
-        <div class="tweaks-group">
-          <div class="tweaks-label">ПЛИТКИ</div>
-          <div class="tweaks-pills" data-group="tiles">
-            <button type="button" class="tweak-pill" data-tiles="raw">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-              <span>Яркие</span>
-            </button>
-            <button type="button" class="tweak-pill" data-tiles="calm">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 12h18M12 3v18"/></svg>
-              <span>Спокойные</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
 
     <script src="dist/bundle.js"></script>
   </body>
