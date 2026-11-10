@@ -287,7 +287,7 @@ import { refreshWebviewVisibility } from './core/webviews.js';
 
     const webview = state.webviews.get(row.accountId);
     if (!webview) { restoreRow('no_webview'); return; }
-    const sched = window.WaDeckScheduleModule || {};
+    const sched = window.WaDeckChatOpenModule || {};
     try {
       let res = typeof sched.openChatByListClick === 'function'
         ? await sched.openChatByListClick(webview, row.name)

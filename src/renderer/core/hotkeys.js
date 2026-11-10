@@ -11,7 +11,6 @@ import {
   openSettingsPanel,
   closeSettingsPanel,
 } from './settings.js';
-import { WaDeckScheduleModule } from '../schedule.js';
 import { WaDeckAutoUpdateModule } from '../auto-update.js';
 import { WaDeckCrmModule } from '../crm.js';
 
@@ -42,11 +41,6 @@ function handleEscapeUiReset() {
     window.WaDeckHelp.hide();
     return true;
   }
-  // 0.5 Сплит-браузер — Esc закрывает панель (F1 обещает «верхний слой»)
-  if (window.WaDeckSplitModule?.isOpen?.()) {
-    window.WaDeckSplitModule.toggle();
-    return true;
-  }
   // 0.7 Поповер «+» (выбор мессенджера) — самый мелкий слой, закрывается первым
   const addPopover = document.getElementById('add-account-popover');
   if (isOpen(addPopover)) {
@@ -68,11 +62,6 @@ function handleEscapeUiReset() {
   // 3. Confirm modal — cancels the pending action
   if (isOpen(els.confirmModal)) {
     closeConfirm(false);
-    return true;
-  }
-  // 4. Chat picker
-  if (isOpen(els.chatPickerModal)) {
-    WaDeckScheduleModule.closeChatPicker();
     return true;
   }
   // 5. Account management modal

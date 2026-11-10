@@ -21,19 +21,10 @@ contextBridge.exposeInMainWorld('waDeck', {
   pickAttachments: () => ipcRenderer.invoke('pick-attachments'),
   pickAudioFile: () => ipcRenderer.invoke('pick-audio-file'),
   transcribeVoice: (payload) => ipcRenderer.invoke('transcribe-voice', payload),
-  scheduleMessage: (payload) => ipcRenderer.invoke('schedule-message', payload),
-  listScheduled: (payload) => ipcRenderer.invoke('list-scheduled', payload),
-  claimDueScheduled: (payload) => ipcRenderer.invoke('claim-due-scheduled', payload),
-  completeScheduled: (payload) => ipcRenderer.invoke('complete-scheduled', payload),
-  cancelScheduled: (id) => ipcRenderer.invoke('cancel-scheduled', id),
-  scheduledStatus: (id) => ipcRenderer.invoke('scheduled-status', id),
-  sendScheduledNow: (id) => ipcRenderer.invoke('send-scheduled-now', id),
-  snoozeScheduled: (payload) => ipcRenderer.invoke('snooze-scheduled', payload),
   getContactLang: (payload) => ipcRenderer.invoke('get-contact-lang', payload),
   setContactLang: (payload) => ipcRenderer.invoke('set-contact-lang', payload),
   favoritesToggle: (payload) => ipcRenderer.invoke('favorites-toggle', payload),
   importantToggle: (payload) => ipcRenderer.invoke('important-toggle', payload),
-  sendAttachmentsViaCDP: (payload) => ipcRenderer.invoke('send-attachments-via-cdp', payload),
   openDataDir: () => ipcRenderer.invoke('open-data-dir'),
   getClipboardText: () => ipcRenderer.invoke('get-clipboard-text'),
   setClipboardText: (text) => ipcRenderer.invoke('set-clipboard-text', text),
@@ -94,12 +85,6 @@ contextBridge.exposeInMainWorld('waDeck', {
     const listener = () => callback();
     ipcRenderer.on('bundle-renamed', listener);
     return () => ipcRenderer.removeListener('bundle-renamed', listener);
-  },
-  onGuestLink: (callback) => {
-    if (typeof callback !== 'function') return () => {};
-    const listener = (_event, payload) => callback(payload || {});
-    ipcRenderer.on('guest-link', listener);
-    return () => ipcRenderer.removeListener('guest-link', listener);
   },
   onHostHotkey: (callback) => {
     if (typeof callback !== 'function') return () => {};

@@ -143,7 +143,7 @@ import { showToast } from './core/helpers.js';
     if (setActiveAccount) setActiveAccount(f.accountId);
     const webview = state.webviews.get(f.accountId);
     if (!webview) return;
-    const sched = window.WaDeckScheduleModule || {};
+    const sched = window.WaDeckChatOpenModule || {};
     const byClick = sched.openChatByListClick;
     const bySearch = sched.openChatInWebview;
     try {

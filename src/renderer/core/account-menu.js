@@ -14,7 +14,6 @@ import {
 import { cleanupWebview, ensureWebview, refreshWebviewVisibility } from './webviews.js';
 import { updateHubDashboard } from './hub.js';
 import { WaDeckUnreadModule } from '../unread.js';
-import { WaDeckScheduleModule } from '../schedule.js';
 
 function openAccountMenu(accountId) {
   const account = accountById(accountId);
@@ -210,10 +209,6 @@ async function saveAccountFromMenu() {
     }
   }
 
-  if (state.scheduleTarget.accountId === accountId) {
-    state.scheduleTarget.accountName = String(currentAccount.name || nextName);
-    WaDeckScheduleModule.renderScheduleTarget();
-  }
   renderAccounts();
   setStatus(changed ? `Сохранено: ${currentAccount.name || nextName}` : 'Изменений нет');
   closeAccountMenu();
@@ -248,11 +243,6 @@ async function resetAccountFromMenu() {
   els.accountMenuName.value = defaultName;
   if (els.accountMenuIcon) {
     els.accountMenuIcon.style.borderColor = '';
-  }
-
-  if (state.scheduleTarget.accountId === accountId) {
-    state.scheduleTarget.accountName = defaultName;
-    WaDeckScheduleModule.renderScheduleTarget();
   }
 
   renderAccounts();
@@ -320,9 +310,6 @@ async function setAccountFrozenState(accountId, nextFrozen, options = {}) {
   if (response.account.frozen) {
     cleanupWebview(state.webviews.get(accountId));
     state.webviews.delete(accountId);
-    if (state.chatPickerCache && state.chatPickerCache.accountId === accountId) {
-      state.chatPickerCache = null;
-    }
     WaDeckUnreadModule.setUnreadCount(accountId, 0);
     if (state.activeAccountId === accountId) {
       refreshWebviewVisibility();

@@ -111,7 +111,7 @@ function translatorBarScript(token) {
       const chat = currentChatId;
       // Ответ пришёл после смены чата — язык принадлежит прошлому собеседнику.
       if (reqChat !== chat) return;
-      // В фоне чат мог смениться без нашего тика (планировщик) — не угадываем.
+      // В фоне чат мог смениться без нашего тика — не угадываем.
       if (window.__waDeckWebviewActive === false) return;
       if (!chat || chat === '__unknown_chat__' || contactLangKnown || !langLoaded) return;
       if (langGuess.chat !== chat) langGuess = { chat: chat, counts: {} };

@@ -6,7 +6,6 @@ import {
   showToast,
   runWithBusyButton,
   closeConfirm,
-  nextSendAtLocal,
 } from './helpers.js';
 import {
   addAccount,
@@ -34,7 +33,6 @@ import {
   applyTranslatorToggleToAllWebviews,
   applyCrmHoverToggle,
   applyHibernationSetting,
-  prefillScheduleTargetFromActiveChat,
 } from './webviews.js';
 import {
   normalizeTheme,
@@ -61,7 +59,6 @@ import { templateController } from './init.js';
 import { WaDeckWeatherModule } from '../weather.js';
 import { WaDeckAutoUpdateModule } from '../auto-update.js';
 import { WaDeckCrmModule } from '../crm.js';
-import { WaDeckScheduleModule } from '../schedule.js';
 
 function bindActions() {
   // ── Add-account popover (WhatsApp / Telegram choice) ──
@@ -121,8 +118,7 @@ function bindActions() {
   els.themeToggle?.addEventListener('click', () => toggleTheme().catch(console.error));
   els.closePanel?.addEventListener('click', closeSettingsPanel);
 
-  // Settings menu: card clicks → open section (or dedicated drawer for
-  // scheduled messages, so it matches the toolbar button UX).
+  // Settings menu: card clicks → open section.
   document.querySelectorAll('.settings-menu-item[data-open]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const key = btn.getAttribute('data-open');
@@ -437,77 +433,8 @@ function bindActions() {
   window.addEventListener('resize', () => {
     updateSidebarScrollControls();
   });
-  els.pickAttachments?.addEventListener('click', () => WaDeckScheduleModule.pickAttachments().catch(console.error));
-  els.clearAttachments?.addEventListener('click', WaDeckScheduleModule.clearAttachments);
-  els.openChatPicker?.addEventListener('click', () => WaDeckScheduleModule.openChatPicker().catch(console.error));
-
-  /* Quick-time buttons under "Время отправки": set send time to now + N min. */
-  document.getElementById('schedule-quick-row')?.addEventListener('click', (event) => {
-    const btn = event.target.closest('[data-quick-min]');
-    if (!btn || !els.scheduleAt) return;
-    const minutes = Number(btn.dataset.quickMin) || 0;
-    els.scheduleAt.value = nextSendAtLocal(minutes);
-  });
-
-  /* ── Toolbar «Отложенные» открывает раздел настроек. */
-  function openScheduleSection() {
-    if (state.panelHidden) openSettingsPanel();
-    showSettingsSection('schedule');
-    // Always prefill "send at" on every open — even if the card was already
-    // expanded from a previous visit. Otherwise the field keeps a stale value
-    // (often a few minutes old). +1 min: main rejects sendAt earlier than
-    // now+3s, so prefilling with "now" guaranteed an error.
-    if (els.scheduleAt) {
-      els.scheduleAt.value = nextSendAtLocal(1);
-    }
-    // Two-click scheduling: if a chat is open in the active webview, use it
-    // as the target right away. The user can still change it via the picker.
-    prefillScheduleTargetFromActiveChat().catch(() => {});
-  }
-
-  if (els.openScheduleToolbar) {
-    els.openScheduleToolbar.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const isOpenOnSchedule = !state.panelHidden && state._openSettingsSection === 'schedule';
-      if (isOpenOnSchedule) {
-        closeSettingsPanel();
-      } else {
-        openScheduleSection();
-      }
-    });
-  }
-  // Обновляем черновик при входе в раздел из меню настроек.
-  document.querySelectorAll('.settings-menu-item[data-open="schedule"]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      // showSettingsSection already fired by the generic handler — just refresh time.
-      setTimeout(() => {
-        if (els.scheduleAt) els.scheduleAt.value = nextSendAtLocal(1);
-        prefillScheduleTargetFromActiveChat().catch(() => {});
-      }, 0);
-    });
-  });
-
-  /* Keep settings card toggle handler for datetime reset */
-  const scheduleCard = document.getElementById('schedule-settings-card');
-  if (scheduleCard) {
-    scheduleCard.addEventListener('toggle', () => {
-      // toggle асинхронный: при «Изменить» он прилетал ПОСЛЕ подстановки
-      // времени задания и сбрасывал его на «сейчас + 1 мин».
-      if (scheduleCard.open && !state._editingScheduleId) {
-        els.scheduleAt.value = nextSendAtLocal(1);
-      }
-    });
-  }
-
-  els.pickerAccount?.addEventListener('change', () => WaDeckScheduleModule.refreshPickerChats(true).catch(console.error));
-  els.pickerRefresh?.addEventListener('click', () => WaDeckScheduleModule.refreshPickerChats(true).catch(console.error));
-  els.closeChatPicker?.addEventListener('click', WaDeckScheduleModule.closeChatPicker);
-  // Backdrop click closes the chat picker and the account menu (CRM modal
-  // intentionally keeps its pass-through backdrop).
-  els.chatPickerModal?.addEventListener('click', (e) => {
-    if (e.target === els.chatPickerModal) WaDeckScheduleModule.closeChatPicker();
-  });
+  // Backdrop click closes the account menu (CRM modal intentionally keeps
+  // its pass-through backdrop).
   els.accountMenuModal?.addEventListener('click', (e) => {
     if (e.target === els.accountMenuModal) closeAccountMenu();
   });
@@ -548,42 +475,6 @@ function bindActions() {
     if (!id) return;
     closeAccountMenu();
     removeAccount(id).catch(console.error);
-  });
-  els.pickerApply?.addEventListener('click', () => {
-    // Always tie the pick to the currently active account — renderer ignores
-    // the hidden picker-account select entirely to match the "chats from the
-    // open account only" UX.
-    const accountId = String(state.activeAccountId || '').trim();
-    const chatName = String(els.pickerChat.value || '').trim();
-    const account = state.accounts.find((row) => row.id === accountId);
-    if (!accountId || !account) {
-      setStatus('Откройте WhatsApp-аккаунт');
-      return;
-    }
-    if (!chatName) {
-      setStatus('Выберите чат');
-      return;
-    }
-    // Changing the target while editing a scheduled item drops edit mode —
-    // the new selection describes a different message, not the original.
-    if (state._editingScheduleId
-        && (state.scheduleTarget.accountId !== accountId || state.scheduleTarget.chatName !== chatName)) {
-      WaDeckScheduleModule.cancelScheduleEditMode?.();
-    }
-    state.scheduleTarget = {
-      accountId,
-      accountName: account.name,
-      chatName,
-    };
-    WaDeckScheduleModule.renderScheduleTarget();
-    WaDeckScheduleModule.closeChatPicker();
-    setStatus(`Цель отправки: ${account.name} / ${chatName}`);
-  });
-  els.createSchedule?.addEventListener('click', () => {
-    runWithBusyButton(els.createSchedule, () => WaDeckScheduleModule.createScheduledMessage(), {
-      text: 'Планирую...',
-      title: 'Создание отложенной отправки',
-    }).catch(console.error);
   });
   templateController?.bind();
 

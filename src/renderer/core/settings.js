@@ -6,7 +6,6 @@ import { selectedWebview } from './accounts.js';
 import { insertTextIntoActiveChat } from './webviews.js';
 import { WaDeckWeatherModule } from '../weather.js';
 import { WaDeckCrmModule } from '../crm.js';
-import { WaDeckScheduleModule } from '../schedule.js';
 
 function normalizeTheme(value) {
   return String(value || '').toLowerCase() === 'light' ? 'light' : 'dark';
@@ -229,7 +228,6 @@ function openSettingsPanel() {
 
 function closeSettingsPanel() {
   state.panelHidden = true;
-  WaDeckScheduleModule.cancelScheduleEditMode?.();
   updatePanelVisibility();
   els.togglePanel?.classList.remove('is-active');
   refreshTweaksFabVisibility();
@@ -254,7 +252,6 @@ function toggleTweaksPopover(forceOpen) {
 const SETTINGS_SECTION_TITLES = {
   interface: 'Интерфейс',
   templates: 'Общие шаблоны',
-  schedule: 'Отложенные сообщения',
   clocks: 'Мировые часы',
   weather: 'Погода',
 };
@@ -289,9 +286,6 @@ function applyTileMode(mode) {
 
 function showSettingsMenu() {
   if (!els.settingsViewMenu || !els.settingsViewDetail) return;
-  if (state._openSettingsSection === 'schedule') {
-    WaDeckScheduleModule.cancelScheduleEditMode?.();
-  }
   els.settingsViewDetail.classList.add('hidden');
   els.settingsViewMenu.classList.remove('hidden');
   els.settingsViewMenu.setAttribute('data-dir', 'back');
@@ -310,9 +304,6 @@ function showSettingsSection(key) {
   if (!els.settingsViewMenu || !els.settingsViewDetail) return;
   const section = els.settingsViewDetail.querySelector(`.settings-section[data-settings-section="${CSS.escape(key)}"]`);
   if (!section) return;
-  if (state._openSettingsSection === 'schedule' && key !== 'schedule') {
-    WaDeckScheduleModule.cancelScheduleEditMode?.();
-  }
   els.settingsViewDetail.querySelectorAll('.settings-section').forEach((s) => s.classList.remove('active'));
   section.classList.add('active');
   els.settingsViewMenu.classList.add('hidden');
@@ -562,9 +553,6 @@ function refreshSettingsMenuSubtitles() {
       const catWord = plural(cats.size, ['категория', 'категории', 'категорий']);
       if (!count) return 'нет шаблонов';
       return `${count} ${tplWord}${cats.size ? ` · ${cats.size} ${catWord}` : ''}`;
-    },
-    schedule: () => {
-      return 'очередь · расписание';
     },
     clocks: () => {
       const count = Array.isArray(state.settings?.worldClocks) ? state.settings.worldClocks.length : 0;

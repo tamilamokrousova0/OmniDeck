@@ -57,7 +57,7 @@ function setStatus(text) {
   }
   // «обновлен(?!ие)»: слово «обновление» — это ПРОЦЕСС (загрузка идёт), и
   // каждый его процент раньше улетал отдельным тостом, выстраивая столбик
-  const isResult = /сохранен|сохранён|скопирован|удален|удалён|разморожен|запланирован|отменен|отменён|вставлен|отправлено|обновлен(?!ие)|обновлён|сброшен|закреплён|откреплён/.test(lower);
+  const isResult = /сохранен|сохранён|скопирован|удален|удалён|разморожен|отменен|отменён|вставлен|отправлено|обновлен(?!ие)|обновлён|сброшен|закреплён|откреплён/.test(lower);
   if (isResult) {
     showToast(safeText, 'success');
     return;
@@ -173,25 +173,6 @@ function escapeHtml(text) {
   return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 }
 
-function formatDateTime(iso) {
-  const dt = new Date(iso || '');
-  if (Number.isNaN(dt.getTime())) return '—';
-  return dt.toLocaleString('ru-RU');
-}
-
-function toLocalDateTimeInput(iso) {
-  const dt = new Date(iso || '');
-  if (Number.isNaN(dt.getTime())) return '';
-  const p = (n) => String(n).padStart(2, '0');
-  return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}T${p(dt.getHours())}:${p(dt.getMinutes())}:${p(dt.getSeconds())}`;
-}
-
-function nextSendAtLocal(minutes = 5) {
-  const dt = new Date(Date.now() + minutes * 60 * 1000);
-  dt.setMilliseconds(0);
-  return toLocalDateTimeInput(dt.toISOString());
-}
-
 /* Escape arbitrary text for interpolation inside a single-quoted JS string
    passed to executeJavaScript. Besides backslash/quote/newline, CR and the
    U+2028/U+2029 line separators must be escaped — a raw one inside a string
@@ -271,9 +252,6 @@ export {
   setButtonBusy,
   runWithBusyButton,
   escapeHtml,
-  formatDateTime,
-  toLocalDateTimeInput,
-  nextSendAtLocal,
   escapeForJsSingleQuoted,
   delay,
   TEMPLATE_VAR_RE,

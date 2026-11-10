@@ -6,11 +6,7 @@ import {
   showToast,
   trimMapSize,
   runWithBusyButton,
-  showConfirm,
   delay,
-  formatDateTime,
-  nextSendAtLocal,
-  applyTemplateVariables,
   setToolbarLabel,
 } from './helpers.js';
 import {
@@ -18,7 +14,6 @@ import {
   activeAccount,
   selectedWebview,
   setActiveAccount,
-  accountById,
   refreshActiveWebview,
 } from './accounts.js';
 import {
@@ -45,9 +40,9 @@ import { WaDeckWeatherModule } from '../weather.js';
 import { WaDeckAutoUpdateModule } from '../auto-update.js';
 import { WaDeckUnreadModule } from '../unread.js';
 import { WaDeckCrmModule } from '../crm.js';
+import { WaDeckChatOpenModule } from '../chat-open.js';
 import { WaDeckFavoritesModule } from '../favorites.js';
 import { WaDeckImportantModule } from '../important.js';
-import { WaDeckScheduleModule } from '../schedule.js';
 
 /* Global error handlers for renderer process */
 window.addEventListener('error', (e) => console.error('[renderer] error:', e.error || e.message));
@@ -98,10 +93,8 @@ async function init() {
   WaDeckFavoritesModule.init({ ...moduleCtx, setActiveAccount, isWebviewReady, safeExecuteInWebview });
   WaDeckImportantModule.init({ ...moduleCtx, setActiveAccount, isWebviewReady, safeExecuteInWebview });
   window.WaDeckUnreadFeed?.init?.({ ...moduleCtx, setActiveAccount, isWebviewReady, safeExecuteInWebview });
-  WaDeckScheduleModule.init({ ...moduleCtx, trimMapSize, runWithBusyButton, accountById, ensureWebview, isWebviewReady, sendWebviewInput, delay, formatDateTime, nextSendAtLocal, showConfirm, applyTemplateVariables });
-  window.WaDeckSplitModule?.init?.(moduleCtx);
+  WaDeckChatOpenModule.init({ isWebviewReady, sendWebviewInput, delay });
   window.WaDeckSignalPanel?.init?.({ ...moduleCtx, setActiveAccount });
-  document.getElementById('toggle-split')?.addEventListener('click', () => window.WaDeckSplitModule?.toggle?.());
   if (typeof window.waDeck.onAutoUpdateStatus === 'function' && !state.autoUpdateUnsubscribe) {
     state.autoUpdateUnsubscribe = window.waDeck.onAutoUpdateStatus((payload) => {
       WaDeckAutoUpdateModule.handleAutoUpdateStatus(payload);
@@ -115,7 +108,7 @@ async function init() {
         window.WaDeckGlobalSearch.close();
         return;
       }
-      // Фокус в host-поле (адрес сплита, поиск) — Escape наш, не гостя
+      // Фокус в host-поле (поиск) — Escape наш, не гостя
       const ae = document.activeElement;
       if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) {
         try { ae.blur(); } catch { /* ignore */ }
@@ -184,8 +177,6 @@ async function init() {
     window.waDeck.onWebviewCrashed((payload) => {
       console.warn('[webview-crashed]', payload.reason);
       setStatus(`Webview упал (${payload.reason}). Перезагрузка...`);
-      // Сплит-браузер — тоже webview, но не в state.webviews
-      if (window.WaDeckSplitModule?.reloadIfCrashed?.(payload.webContentsId)) return;
       // main передаёт id упавшего contents: старый «getWebContentsId бросит»
       // в новых Electron не работает — метод возвращает id и после краша
       for (const [accountId, webview] of state.webviews) {
@@ -336,8 +327,6 @@ async function init() {
   setActiveAccount('');
   updatePanelVisibility();
   applySettingsToForm({ renderWeather: true });
-  WaDeckScheduleModule.renderAttachmentsDraft();
-  WaDeckScheduleModule.renderScheduleTarget();
   els.crmContactName.value = '';
   els.crmAbout.value = '';
   els.crmMyInfo.value = '';
@@ -359,15 +348,12 @@ async function init() {
     await templateController.init(state.templates);
   }
 
-  els.scheduleAt.value = nextSendAtLocal(1);
-  /* renderScheduled() already called via setActiveAccount → _setActiveAccountInner */
 
   bindActions();
   WaDeckWeatherModule.startWeatherRefreshLoop();
   WaDeckWeatherModule.refreshWeather().catch((e) => console.warn('[weather]', e));
   WaDeckUnreadModule.startUnreadPolling();
   WaDeckUnreadModule.scheduleDockBadgeSync();
-  WaDeckScheduleModule.startScheduleRunner();
   WaDeckFavoritesModule.startFavoritePolling();
   WaDeckImportantModule.startImportantPolling();
   // Idle-suspend disabled: destroying inactive webviews after 15 min forced

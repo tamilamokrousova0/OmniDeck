@@ -21,17 +21,6 @@ const state = {
   webviews: new Map(),
   panelHidden: true,
   templates: [],
-  scheduleRunnerTimer: null,
-  attachmentsDraft: [],
-  scheduleRunnerBusy: false,
-  scheduleTarget: {
-    accountId: '',
-    accountName: '',
-    chatName: '',
-  },
-  // Single-entry cache: picker only ever shows chats for the active account.
-  // Shape: { accountId, at, chats }  (null when nothing fetched yet)
-  chatPickerCache: null,
   unreadByAccount: new Map(),
   unreadPollTimer: null,
   dockBadgeTimer: null,
@@ -119,21 +108,6 @@ const els = {
   templateDelete: document.getElementById('template-delete'),
   templateToChat: document.getElementById('template-to-chat'),
 
-  scheduleTarget: document.getElementById('schedule-target'),
-  openChatPicker: document.getElementById('open-chat-picker'),
-  scheduleText: document.getElementById('schedule-text'),
-  scheduleAt: document.getElementById('schedule-at'),
-  pickAttachments: document.getElementById('pick-attachments'),
-  clearAttachments: document.getElementById('clear-attachments'),
-  attachmentsList: document.getElementById('attachments-list'),
-  createSchedule: document.getElementById('create-schedule'),
-  scheduledList: document.getElementById('scheduled-list'),
-  chatPickerModal: document.getElementById('chat-picker-modal'),
-  closeChatPicker: document.getElementById('close-chat-picker'),
-  pickerAccount: document.getElementById('picker-account'),
-  pickerChat: document.getElementById('picker-chat'),
-  pickerRefresh: document.getElementById('picker-refresh'),
-  pickerApply: document.getElementById('picker-apply'),
   accountMenuModal: document.getElementById('account-menu-modal'),
   accountMenuTitle: document.getElementById('account-menu-title'),
   accountMenuName: document.getElementById('account-menu-name'),
@@ -196,7 +170,6 @@ const els = {
   toolbarClockTime: document.getElementById('toolbar-clock-time'),
 
   openTemplateQuick: document.getElementById('open-template-quick'),
-  openScheduleToolbar: document.getElementById('open-schedule-toolbar'),
   sendVoiceMsg: document.getElementById('send-voice-msg'),
 
   crmFavToggle: document.getElementById('crm-fav-toggle'),

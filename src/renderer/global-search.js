@@ -11,7 +11,7 @@
  *      while the user is looking at it).
  *
  * Enter / click switches to the account and opens the chat through
- * WaDeckScheduleModule.openChatInWebview (WhatsApp's own search box), so a
+ * WaDeckChatOpenModule.openChatInWebview (WhatsApp's own search box), so a
  * contact missing from a partially-collected list still opens fine — the
  * palette only needs a name to hand over.
  */
@@ -124,10 +124,10 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
         const webview = state.webviews.get(account.id);
         if (!isWebviewReady?.(webview)) { _sweepDone++; continue; } // спит/грузится — остаётся кэш
         const token = typeof WADECK_WV_TOKEN !== 'undefined' ? WADECK_WV_TOKEN : '';
-        /* Сборщик крутит #pane-side ~5 с — делит webview с планировщиком и
+        /* Сборщик крутит #pane-side ~5 с — делит webview с
            прыжками в чат через общую блокировку. Фон в занятый webview не
            встаёт в очередь: список возьмём со следующего тика. */
-        const sched = window.WaDeckScheduleModule || {};
+        const sched = window.WaDeckChatOpenModule || {};
         // Пользователь мог переключиться на этот аккаунт посреди прохода —
         // фильтр выше смотрел на активный аккаунт только в начале.
         if (background && (account.id === state.activeAccountId || sched.isWebviewLocked?.(webview))) {
@@ -318,7 +318,7 @@ import { collectChatsFromSidebarScript } from './webview-scripts/collect-chats.j
     close();
     if (typeof setActiveAccount === 'function') setActiveAccount(item.accountId);
     const webview = state.webviews.get(item.accountId);
-    const sched = window.WaDeckScheduleModule || {};
+    const sched = window.WaDeckChatOpenModule || {};
     if (webview && sched.openChatInWebview) {
       // По номеру: заголовок найденного контакта — имя, номер в нём не
       // встречается, поэтому просим кликнуть первый результат поиска WA.

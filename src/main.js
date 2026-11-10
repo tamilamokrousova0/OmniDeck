@@ -32,11 +32,15 @@ const { initSignal } = require('./signal');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-features', 'IntensiveWakeUpThrottling,CalculateNativeWinOcclusion');
+// Профили аккаунтов: HTTP-кэш каждой партиции не больше 16 МБ (код WhatsApp
+// и так лежит в кэше service worker), шейдеры на диск не пишутся.
+app.commandLine.appendSwitch('disk-cache-size', String(16 * 1024 * 1024));
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
 /**
  * Defense-in-depth: only allow attachment paths that live under the user's
  * home directory and don't touch known sensitive subtrees. A compromised
- * renderer (XSS) could otherwise schedule a message with `attachments: [{path:
+ * renderer (XSS) could otherwise send a message with `attachments: [{path:
  * '/Users/.../.ssh/id_rsa'}]` and exfiltrate secrets through the WA upload.
  */
 /* Пути, которые пользователь ЯВНО выбрал через системный диалог — доверенный
@@ -71,7 +75,7 @@ async function isAttachmentPathAllowed(filePath) {
       if (_dialogPickedPaths.has(rp)) return true;
     } catch { /* не существует — упадёт ниже на общей проверке */ }
     // Resolve symlinks BEFORE the prefix/blocklist check. Otherwise a renderer
-    // (post-XSS) could schedule `~/innocent` as a symlink to /etc/... or
+    // (post-XSS) could pass `~/innocent` as a symlink to /etc/... or
     // ~/.ssh/id_rsa and pass a purely lexical "under home" test. realpath
     // throws if the target doesn't exist — attachments must exist, so reject.
     let real;
@@ -211,7 +215,6 @@ const state = {
     accounts: [],
     settings: { ...DEFAULT_SETTINGS },
     templates: [],
-    scheduled: [],
     // Favorite contacts: [{ accountId, name }]. Surfaced as toolbar chips +
     // a hub filter; toggled from the CRM drawer star.
     favorites: [],
@@ -250,51 +253,6 @@ const ALLOWED_WEBVIEW_PERMISSIONS = new Set([
   'clipboard-sanitized-write',
   'speaker-selection',
 ]);
-
-/* Split-браузер — обычный веб-сёрфинг по произвольным адресам. Давать ему тот
-   же набор, что WhatsApp/Telegram, значит выдавать камеру и микрофон любому
-   сайту без спроса. Безобидное (fullscreen, запись в буфер) разрешаем молча,
-   камеру/микрофон/уведомления спрашиваем один раз на origin за сессию. */
-const SPLIT_SILENT_PERMISSIONS = new Set([
-  'fullscreen',
-  'pointerLock',
-  'clipboard-sanitized-write',
-]);
-const SPLIT_ASKABLE_PERMISSIONS = new Map([
-  ['media', 'камере и микрофону'],
-  ['notifications', 'показу уведомлений'],
-]);
-const _splitPermissionAnswers = new Map(); // `${origin}:${permission}` → boolean
-
-function originOf(url) {
-  try { return new URL(String(url || '')).origin; } catch { return ''; }
-}
-
-function askSplitPermission(contents, permission) {
-  const origin = originOf(contents?.getURL?.()) || 'неизвестный сайт';
-  const key = `${origin}:${permission}`;
-  if (_splitPermissionAnswers.has(key)) return _splitPermissionAnswers.get(key);
-  const what = SPLIT_ASKABLE_PERMISSIONS.get(permission) || permission;
-  const parentWin = (mainWindow && !mainWindow.isDestroyed()) ? mainWindow : undefined;
-  let allowed = false;
-  try {
-    const choice = dialog.showMessageBoxSync(parentWin, {
-      type: 'question',
-      buttons: ['Запретить', 'Разрешить'],
-      defaultId: 0,
-      cancelId: 0,
-      title: 'Запрос сайта',
-      message: `${origin} запрашивает доступ к ${what}.`,
-      detail: 'Ответ запомнится до перезапуска деки.',
-    });
-    allowed = choice === 1;
-  } catch (err) {
-    console.warn('[split-permission] dialog failed:', err?.message || err);
-    allowed = false;
-  }
-  _splitPermissionAnswers.set(key, allowed);
-  return allowed;
-}
 
 function setDockBadge(count, badgeDataUrl) {
   const safeCount = Math.max(0, Number(count) || 0);
@@ -452,7 +410,6 @@ function sanitizeStore(raw) {
       ...(raw?.settings || {}),
     },
     templates: Array.isArray(raw?.templates) ? raw.templates : [],
-    scheduled: Array.isArray(raw?.scheduled) ? raw.scheduled : [],
   };
 
   clean.settings.uiTheme = String(clean.settings.uiTheme || 'dark').toLowerCase() === 'light' ? 'light' : 'dark';
@@ -528,38 +485,6 @@ function sanitizeStore(raw) {
     })
     .filter((item) => String(item.text || '').trim() || String(item.title || '').trim())
     .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
-
-  clean.scheduled = clean.scheduled
-    .map((item) => ({
-      id: String(item?.id || ''),
-      accountId: String(item?.accountId || ''),
-      chatName: String(item?.chatName || '').trim(),
-      text: String(item?.text || ''),
-      attachments: Array.isArray(item?.attachments)
-        ? item.attachments
-            .map((att) => ({
-              path: String(att?.path || ''),
-              name: String(att?.name || path.basename(String(att?.path || ''))),
-            }))
-            .filter((att) => att.path)
-        : [],
-      sendAt: String(item?.sendAt || ''),
-      // Recurrence: baseSendAt is the canonical (jitter-free) occurrence time
-      // the next occurrence is computed from; repeatSpawned guards against
-      // spawning the next occurrence twice when an item is retried.
-      repeat: ['daily', 'weekdays', 'weekly'].includes(String(item?.repeat || '')) ? String(item.repeat) : '',
-      jitterMinutes: Math.max(0, Math.min(60, Math.round(Number(item?.jitterMinutes) || 0))),
-      baseSendAt: String(item?.baseSendAt || ''),
-      repeatSpawned: Boolean(item?.repeatSpawned),
-      status: ['pending', 'processing', 'sent', 'failed', 'canceled'].includes(String(item?.status || ''))
-        ? String(item.status)
-        : 'pending',
-      claimedAt: String(item?.claimedAt || ''),
-      createdAt: String(item?.createdAt || new Date().toISOString()),
-      updatedAt: String(item?.updatedAt || new Date().toISOString()),
-      errorText: String(item?.errorText || ''),
-    }))
-    .filter((item) => item.id && item.accountId && item.chatName && item.sendAt);
 
   clean.contactLangs = {};
   const rawLangs = (raw?.contactLangs && typeof raw.contactLangs === 'object' && !Array.isArray(raw.contactLangs))
@@ -637,8 +562,7 @@ function sanitizeStore(raw) {
 
 const STORE_MAX_SIZE = 50 * 1024 * 1024; // 50 MB — soft threshold, only logs a warning
 // Hard cap purely as an OOM guard. An oversized store is still user data —
-// we load it anyway and let pruneFinishedScheduled() shrink it back, instead
-// of throwing it away (which used to end with BOTH files overwritten empty).
+// we load it anyway instead of throwing it away (which used to end with BOTH files overwritten empty).
 const STORE_HARD_MAX_SIZE = 200 * 1024 * 1024; // 200 MB
 
 // Centralized size limits for user-supplied payloads coming from the renderer.
@@ -655,10 +579,7 @@ const LIMITS = {
   CRM_TEXT: 50000,             // each of about/myInfo
   CLIPBOARD_TEXT: 200000,
   TRANSLATE_TEXT: 20000,       // Google Translate's hard cap is 5K; we're generous
-  MESSAGE_TEXT: 65000,
-  SCHEDULED_PER_USER: 2000,    // total pending+processing items
   TEMPLATES_PER_USER: 5000,
-  ATTACHMENTS_PER_MSG: 30,
   FAVORITES_PER_USER: 200,
   IMPORTANT_PER_USER: 200,
 };
@@ -778,81 +699,6 @@ async function loadStore() {
     }
     await fallbackStore(primary);
   }
-}
-
-/* ── Prune finished scheduled items ──────────────────────────────────────
- * sent/failed/canceled records used to live in store.json forever and bloat
- * it without bound. Drop finished records older than 14 days, plus a hard
- * cap: keep at most the newest 1000 finished records. pending/processing
- * items are never touched. */
-const FINISHED_SCHEDULED_STATUSES = new Set(['sent', 'failed', 'canceled']);
-const FINISHED_SCHEDULED_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
-const FINISHED_SCHEDULED_MAX_COUNT = 1000;
-
-function pruneFinishedScheduled() {
-  const items = state.store.scheduled;
-  if (!Array.isArray(items) || !items.length) return 0;
-  const now = Date.now();
-  let kept = items.filter((item) => {
-    if (!FINISHED_SCHEDULED_STATUSES.has(item.status)) return true;
-    const stamp = new Date(item.updatedAt || item.createdAt || 0).getTime() || 0;
-    return (now - stamp) <= FINISHED_SCHEDULED_MAX_AGE_MS;
-  });
-  const finished = kept
-    .filter((item) => FINISHED_SCHEDULED_STATUSES.has(item.status))
-    .sort((a, b) => (new Date(b.updatedAt || 0).getTime() || 0) - (new Date(a.updatedAt || 0).getTime() || 0));
-  if (finished.length > FINISHED_SCHEDULED_MAX_COUNT) {
-    const drop = new Set(finished.slice(FINISHED_SCHEDULED_MAX_COUNT).map((item) => item.id));
-    kept = kept.filter((item) => !drop.has(item.id));
-  }
-  const removed = items.length - kept.length;
-  if (removed > 0) {
-    state.store.scheduled = kept;
-    console.log(`[scheduled] pruned ${removed} finished item(s)`);
-  }
-  return removed;
-}
-
-// A scheduled item is flipped to 'processing' the moment it's claimed for
-// sending. If the renderer reloads/crashes between claim and complete, the
-// boot-time recovery used to be the ONLY thing that reset it — so a renderer
-// reload (Cmd+R, no main-process restart) left the message stuck forever. We
-// now also sweep at runtime: any 'processing' item older than this is returned
-// to 'pending' and retried. Since the renderer only reports success AFTER the
-// WA send, a still-'processing' item almost always means the send never
-// happened, so retrying is safe; the rare double-send window is app death in
-// the few ms between WA send and the persisted 'sent' status.
-// 20 минут (было 5): большое вложение (до 100 МБ) на медленном канале грузится
-// в WhatsApp дольше 5 мин, и сброс processing→pending запускал ВТОРУЮ отправку
-// тому же контакту (видимый дубль). 20 мин заведомо больше любой легитимной
-// отправки, но всё ещё восстанавливает реально зависшие после краха.
-const STALE_PROCESSING_MS = 20 * 60 * 1000; // 20 minutes
-
-/* Recover scheduled messages stuck in 'processing'.
- * maxAgeMs = 0  → reset ALL processing items (use at boot: a restart means
- *                 nothing is genuinely in-flight).
- * maxAgeMs > 0  → reset only items claimed longer than maxAgeMs ago
- *                 (runtime sweep; leaves freshly-claimed sends alone). */
-function recoverStaleProcessingItems(maxAgeMs = 0) {
-  let recovered = 0;
-  const now = Date.now();
-  for (const item of state.store.scheduled) {
-    if (item.status !== 'processing') continue;
-    if (maxAgeMs > 0) {
-      const claimedMs = item.claimedAt ? new Date(item.claimedAt).getTime() : 0;
-      // A valid, recent claim is left alone; missing/old claimedAt = stale.
-      if (claimedMs && (now - claimedMs) < maxAgeMs) continue;
-    }
-    item.status = 'pending';
-    item.claimedAt = '';
-    item.updatedAt = new Date().toISOString();
-    recovered += 1;
-  }
-  if (recovered > 0) {
-    console.log(`[scheduled] recovered ${recovered} stuck processing item(s) back to pending`);
-    saveStore().catch(() => {});
-  }
-  return recovered;
 }
 
 /* Write queue prevents concurrent fs.writeFile calls that can corrupt the store */
@@ -1702,7 +1548,6 @@ async function removeAccount(accountId) {
   state.store.accounts.splice(idx, 1);
   if (state.store.accounts.length === 0) markIntentionalLastAccountRemoval();
   normalizeAccountOrder();
-  state.store.scheduled = state.store.scheduled.filter((item) => item.accountId !== id);
   // Drop per-contact language prefs of the removed account. Keys are
   // `${accountId}\u0000${chatName}` (see contactLangKey), so delete by prefix.
   if (state.store.contactLangs && typeof state.store.contactLangs === 'object') {
@@ -1801,160 +1646,6 @@ function guessMime(filePath) {
   if (ext === '.aac') return 'audio/aac';
   if (ext === '.weba') return 'audio/webm';
   return 'application/octet-stream';
-}
-
-const MAX_ATTACHMENT_SIZE = 100 * 1024 * 1024; // 100 MB
-async function loadAttachmentPayload(filePath) {
-  // File is delivered to the webview via CDP (DOM.setFileInputFiles) using the
-  // absolute path directly — no need to load the bytes into memory here, which
-  // previously caused a ~1.3× base64 spike per 100 MB file.
-  const stat = await fs.stat(filePath);
-  if (stat.size > MAX_ATTACHMENT_SIZE) {
-    throw new Error(`file_too_large: ${path.basename(filePath)} (${Math.round(stat.size / 1024 / 1024)} MB > 100 MB)`);
-  }
-  return {
-    path: filePath,
-    name: path.basename(filePath),
-    mime: guessMime(filePath),
-    size: stat.size,
-  };
-}
-
-async function claimDueScheduled(limit = 5) {
-  // Runtime sweep: return any item stuck in 'processing' (renderer reload/crash
-  // between claim and complete) back to 'pending' so it gets retried instead of
-  // being lost until the next app restart.
-  recoverStaleProcessingItems(STALE_PROCESSING_MS);
-
-  const now = Date.now();
-  const due = state.store.scheduled
-    .filter((item) => item.status === 'pending' && new Date(item.sendAt).getTime() <= now)
-    .sort((a, b) => new Date(a.sendAt).getTime() - new Date(b.sendAt).getTime())
-    .slice(0, Math.max(1, Math.min(20, Number(limit) || 5)));
-
-  if (!due.length) return [];
-
-  const claimedAt = new Date().toISOString();
-  for (const item of due) {
-    item.status = 'processing';
-    item.claimedAt = claimedAt;
-    item.updatedAt = claimedAt;
-  }
-  await saveStore();
-
-  const out = [];
-  for (const item of due) {
-    const attachments = [];
-    const attachmentErrors = [];
-    for (const att of item.attachments) {
-      try {
-        attachments.push(await loadAttachmentPayload(att.path));
-      } catch (err) {
-        // Propagate — without a promised attachment, sending empty text as "ok" is a lie
-        attachmentErrors.push(String(err?.message || err || 'unreadable'));
-      }
-    }
-
-    out.push({
-      ...item,
-      attachments,
-      attachmentErrors,
-    });
-  }
-
-  return out;
-}
-
-const REPEAT_KINDS = new Set(['daily', 'weekdays', 'weekly']);
-
-/* Next occurrence from the canonical (jitter-free) base time. Date arithmetic
- * via setDate keeps the local wall-clock hour across DST transitions. Rolls
- * forward past occurrences the app slept through (laptop closed for a week). */
-function nextRepeatSendAt(baseIso, repeat) {
-  const next = new Date(baseIso);
-  if (Number.isNaN(next.getTime())) return null;
-  const step = () => {
-    next.setDate(next.getDate() + (repeat === 'weekly' ? 7 : 1));
-    if (repeat === 'weekdays') {
-      while (next.getDay() === 0 || next.getDay() === 6) next.setDate(next.getDate() + 1);
-    }
-  };
-  step();
-  let guard = 0;
-  while (next.getTime() <= Date.now() && guard++ < 400) step();
-  return next;
-}
-
-/* Chain the next occurrence of a repeating message. Called from
- * markScheduledResult for BOTH outcomes — one failed occurrence must not kill
- * the series (cancel does: cancelScheduled never spawns). */
-function spawnNextRepeatOccurrence(item) {
-  try {
-    if (item.repeatSpawned) return; // retry of the same occurrence — already chained
-    const next = nextRepeatSendAt(item.baseSendAt || item.sendAt, item.repeat);
-    if (!next) return;
-    const pendingCount = state.store.scheduled
-      .filter((i) => ['pending', 'processing'].includes(i.status)).length;
-    if (pendingCount >= LIMITS.SCHEDULED_PER_USER) {
-      console.warn('[repeat] scheduled limit reached — series stops:', item.chatName);
-      return;
-    }
-    const jitter = Math.max(0, Math.min(60, Math.round(Number(item.jitterMinutes) || 0)));
-    const offsetMs = jitter ? Math.round((Math.random() * 2 - 1) * jitter * 60000) : 0;
-    const sendAtMs = Math.max(Date.now() + 60000, next.getTime() + offsetMs);
-    item.repeatSpawned = true;
-    state.store.scheduled.push({
-      id: `sched_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`,
-      accountId: item.accountId,
-      chatName: item.chatName,
-      text: item.text,
-      attachments: Array.isArray(item.attachments) ? item.attachments.map((att) => ({ ...att })) : [],
-      sendAt: new Date(sendAtMs).toISOString(),
-      baseSendAt: next.toISOString(),
-      repeat: item.repeat,
-      jitterMinutes: jitter,
-      repeatSpawned: false,
-      status: 'pending',
-      claimedAt: '',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      errorText: '',
-    });
-  } catch (err) {
-    console.warn('[repeat] spawn failed:', err?.message || err);
-  }
-}
-
-async function markScheduledResult(payload = {}) {
-  const id = String(payload.id || '');
-  const item = state.store.scheduled.find((row) => row.id === id);
-  if (!item) return { ok: false, error: 'not_found' };
-  // A stale/duplicate completion must not flip an already-finished item
-  // (e.g. resurrect a canceled message as 'sent').
-  if (['sent', 'canceled'].includes(item.status)) return { ok: false, error: 'invalid_status' };
-
-  const ok = Boolean(payload.ok);
-  item.status = ok ? 'sent' : 'failed';
-  item.claimedAt = '';
-  item.errorText = ok ? '' : String(payload.errorText || 'send_failed');
-  item.updatedAt = new Date().toISOString();
-  if (item.repeat && REPEAT_KINDS.has(item.repeat)) {
-    spawnNextRepeatOccurrence(item);
-  }
-  // Keep the finished-items backlog bounded (14 days / 1000 records)
-  pruneFinishedScheduled();
-  await saveStore();
-  return { ok: true };
-}
-
-async function cancelScheduled(id) {
-  const item = state.store.scheduled.find((row) => row.id === id);
-  if (!item) return { ok: false, error: 'not_found' };
-  if (!['pending', 'processing', 'failed'].includes(item.status)) return { ok: false, error: 'invalid_status' };
-  item.status = 'canceled';
-  item.updatedAt = new Date().toISOString();
-  await saveStore();
-  return { ok: true };
 }
 
 /* Security: only allow http/https URLs in shell.openExternal */
@@ -2099,12 +1790,7 @@ function createWindow() {
       delete params.disablewebsecurity;
     }
     const src = String(params?.src || '');
-    // Split-браузер (persist:split_browser) — обычный браузерный webview,
-    // ему можно любой http(s)-адрес; about:blank — его ленивое создание.
-    const isSplitBrowser = String(params?.partition || '') === 'persist:split_browser';
-    const allowed = isSplitBrowser
-      ? (/^https?:\/\//.test(src) || src === 'about:blank' || src === '')
-      : (src.startsWith('https://web.whatsapp.com/') || src.startsWith('https://web.telegram.org/'));
+    const allowed = src.startsWith('https://web.whatsapp.com/') || src.startsWith('https://web.telegram.org/');
     if (!allowed) {
       console.warn('[will-attach-webview] blocked src:', src);
       event.preventDefault();
@@ -2315,55 +2001,30 @@ function setupWebviewGuards() {
   app.on('web-contents-created', (_event, contents) => {
     if (contents.getType() !== 'webview') return;
 
-    // Split-браузер: обычный веб-сёрфинг, WA/TG-ограничения не применяются
-    // (origin-allowlist, WA user-agent, guest-preload). Определяется по
-    // partition-каталогу, как isTelegram() ниже.
-    const isSplitBrowser = (() => {
-      try {
-        return /[\\/]split_browser/.test(contents.session?.getStoragePath?.() || '');
-      } catch { return false; }
-    })();
-
     // Lock down permission requests on this webview's session (once per session).
     const ses = contents.session;
     if (ses && !_permissionConfiguredSessions.has(ses)) {
       _permissionConfiguredSessions.add(ses);
       configureSpellchecker(ses);
-      ses.setPermissionRequestHandler((wc, permission, callback) => {
-        if (isSplitBrowser) {
-          if (SPLIT_SILENT_PERMISSIONS.has(permission)) return callback(true);
-          if (SPLIT_ASKABLE_PERMISSIONS.has(permission)) return callback(askSplitPermission(wc, permission));
-          return callback(false);
-        }
+      ses.setPermissionRequestHandler((_wc, permission, callback) => {
         callback(ALLOWED_WEBVIEW_PERMISSIONS.has(permission));
       });
-      ses.setPermissionCheckHandler((wc, permission, requestingOrigin) => {
-        if (isSplitBrowser) {
-          if (SPLIT_SILENT_PERMISSIONS.has(permission)) return true;
-          // Синхронная проверка не должна открывать диалог: отвечаем по уже
-          // данному ответу, иначе — нет.
-          const origin = requestingOrigin || originOf(wc?.getURL?.());
-          return _splitPermissionAnswers.get(`${origin}:${permission}`) === true;
-        }
+      ses.setPermissionCheckHandler((_wc, permission) => {
         return ALLOWED_WEBVIEW_PERMISSIONS.has(permission);
       });
 
       /* Guest→host bridge preload (see src/preload-webview.js). Session-level
          registration is untouched by the will-attach-webview hardening that
          strips attribute-level preloads a compromised renderer could set. */
-      // Guest-preload — только чатовым webview: инжектить мост в произвольные
-      // сайты split-браузера незачем (лишняя поверхность).
-      if (!isSplitBrowser) {
-        try {
-          const preloadPath = path.join(__dirname, 'preload-webview.js');
-          if (typeof ses.registerPreloadScript === 'function') {
-            ses.registerPreloadScript({ type: 'frame', filePath: preloadPath });
-          } else if (typeof ses.setPreloads === 'function') {
-            ses.setPreloads([preloadPath]);
-          }
-        } catch (err) {
-          console.warn('[webview-preload] registration failed:', err?.message || err);
+      try {
+        const preloadPath = path.join(__dirname, 'preload-webview.js');
+        if (typeof ses.registerPreloadScript === 'function') {
+          ses.registerPreloadScript({ type: 'frame', filePath: preloadPath });
+        } else if (typeof ses.setPreloads === 'function') {
+          ses.setPreloads([preloadPath]);
         }
+      } catch (err) {
+        console.warn('[webview-preload] registration failed:', err?.message || err);
       }
 
       /* Electron 43 changed the default download flow: without a will-download
@@ -2400,11 +2061,7 @@ function setupWebviewGuards() {
     };
 
     // Only set WhatsApp user-agent for WhatsApp webviews
-    if (!isTelegram() && !isSplitBrowser) {
-      contents.setUserAgent(WA_USER_AGENT);
-    } else if (isSplitBrowser) {
-      // Дефолтный UA содержит «Electron/…» — Google-логины и часть сайтов
-      // такие клиенты отбивают; отдаём чистый Chrome той же версии
+    if (!isTelegram()) {
       contents.setUserAgent(WA_USER_AGENT);
     }
 
@@ -2415,14 +2072,7 @@ function setupWebviewGuards() {
     // page reports visibilityState='hidden' (which our display:none does).
     try { contents.setBackgroundThrottling(false); } catch { /* older Electron: no-op */ }
 
-    // Cmd/Ctrl в момент клика по ссылке = «открыть наоборот» (сплит ↔ внешний
-    // браузер, как у Franz). Модификатора в setWindowOpenHandler нет, поэтому
-    // его состояние трекается по клавиатурным событиям guest-а.
-    let _modClickDown = false;
-    let _modClickTs = 0;
     contents.on('before-input-event', (event, input) => {
-      _modClickDown = Boolean(input?.meta || input?.control);
-      _modClickTs = Date.now();
       // Курсор в поле ввода мессенджера — клавиши идут СЮДА, а не в окно деки:
       // без этой строки сквозные хоткеи (Cmd+K/T/R/U, Cmd+Shift+E, F1, Esc)
       // из чата не срабатывали вовсе
@@ -2435,30 +2085,14 @@ function setupWebviewGuards() {
         pasteIntoWhatsApp(contents);
       }
     });
-    // Срок годности флага: keyup мог уйти мимо этого webContents (фокус увело
-    // открытие внешнего браузера) — иначе «наоборот» залипал до следующей клавиши
-    const modFlipActive = () => _modClickDown && (Date.now() - _modClickTs < 3000);
 
+    // Ссылки из чата открываются во внешнем браузере
     contents.setWindowOpenHandler(({ url }) => {
-      const dest = String(url || '');
-      if (isSplitBrowser) {
-        // target=_blank внутри split-браузера открываем в нём же (одна вкладка)
-        if (/^https?:\/\//.test(dest)) contents.loadURL(dest).catch(() => {});
-      } else if (/^https?:\/\//.test(dest) && mainWindow && !mainWindow.isDestroyed()) {
-        // Ссылка из чата: renderer решает — split-панель или внешний браузер
-        mainWindow.webContents.send('guest-link', { url: dest, flip: modFlipActive() });
-      } else {
-        safeOpenExternal(dest);
-      }
+      safeOpenExternal(String(url || ''));
       return { action: 'deny' };
     });
 
     const enforceOriginAllowlist = (event, url) => {
-      if (isSplitBrowser) {
-        // «куда угодно» в пределах веба: file:// и прочие схемы — нет
-        if (!/^https?:/i.test(String(url || ''))) event.preventDefault();
-        return;
-      }
       const dest = String(url || '');
       // Строгое сравнение origin: startsWith без слэша пропускал
       // https://web.whatsapp.com.attacker.tld/...
@@ -2468,11 +2102,9 @@ function setupWebviewGuards() {
       if (origin !== allowed) {
         event.preventDefault();
         /* Ссылка без target=_blank уводила бы webview с мессенджера — но и
-           молча гасить её нельзя (клик «не делал ничего»). Отдаём её деке:
-           откроется в сплит-панели или во внешнем браузере, как обычную. */
-        if (/^https?:\/\//.test(dest) && mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('guest-link', { url: dest, flip: modFlipActive() });
-        }
+           молча гасить её нельзя (клик «не делал ничего»): открываем во
+           внешнем браузере, как обычную. */
+        if (/^https?:\/\//.test(dest)) safeOpenExternal(dest);
       }
     };
     contents.on('will-navigate', enforceOriginAllowlist);
@@ -3555,154 +3187,6 @@ function registerIpc() {
     return { ok: true };
   });
 
-  handle('schedule-message', async (_event, payload) => {
-    const accountId = String(payload?.accountId || '');
-    const chatName = clampString(String(payload?.chatName || '').trim(), LIMITS.CHAT_NAME);
-    const text = clampString(String(payload?.text || ''), LIMITS.MESSAGE_TEXT);
-    const sendAt = String(payload?.sendAt || '');
-    const parsedDate = new Date(sendAt);
-    const rawAtt = Array.isArray(payload?.attachments) ? payload.attachments : [];
-    if (rawAtt.length > LIMITS.ATTACHMENTS_PER_MSG) {
-      return { ok: false, error: 'too_many_attachments' };
-    }
-    const attachments = rawAtt
-      .map((att) => ({
-        path: String(att?.path || ''),
-        name: clampString(String(att?.name || path.basename(String(att?.path || ''))), 255),
-      }))
-      .filter((att) => att.path);
-
-    // Reject attachments outside the user's home directory or touching
-    // sensitive subtrees (.ssh, Keychains, etc.). Defeats XSS-driven
-    // file exfiltration via the scheduled-send path.
-    for (const att of attachments) {
-      if (!(await isAttachmentPathAllowed(att.path))) {
-        return { ok: false, error: 'attachment_path_not_allowed' };
-      }
-    }
-
-    if (!state.store.accounts.find((acc) => acc.id === accountId)) {
-      return { ok: false, error: 'account_not_found' };
-    }
-    if (!chatName) return { ok: false, error: 'chat_required' };
-    if (!text.trim() && !attachments.length) return { ok: false, error: 'text_or_attachment_required' };
-    if (Number.isNaN(parsedDate.getTime())) return { ok: false, error: 'invalid_sendAt' };
-    if (parsedDate.getTime() < Date.now() + 3000) return { ok: false, error: 'sendAt_in_past' };
-
-    // Prevent runaway scheduling that would bloat store.json
-    const pendingCount = state.store.scheduled
-      .filter((i) => ['pending', 'processing'].includes(i.status)).length;
-    if (pendingCount >= LIMITS.SCHEDULED_PER_USER) {
-      return { ok: false, error: 'scheduled_limit_reached' };
-    }
-
-    const repeat = REPEAT_KINDS.has(String(payload?.repeat || '')) ? String(payload.repeat) : '';
-    const jitterMinutes = Math.max(0, Math.min(60, Math.round(Number(payload?.jitterMinutes) || 0)));
-    // Jitter applies to the first occurrence too (clamped into the future) so
-    // a repeating series never fires at a robotic exact minute.
-    let sendAtMs = parsedDate.getTime();
-    if (jitterMinutes) {
-      sendAtMs = Math.max(Date.now() + 60000, sendAtMs + Math.round((Math.random() * 2 - 1) * jitterMinutes * 60000));
-    }
-
-    const item = {
-      id: `sched_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`,
-      accountId,
-      chatName,
-      text,
-      attachments,
-      sendAt: new Date(sendAtMs).toISOString(),
-      baseSendAt: parsedDate.toISOString(),
-      repeat,
-      jitterMinutes,
-      repeatSpawned: false,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      errorText: '',
-    };
-
-    state.store.scheduled.push(item);
-    await saveStore();
-    return { ok: true, item };
-  });
-
-  handle('list-scheduled', async (_event, payload) => {
-    const accountId = String(payload?.accountId || '').trim();
-    const limit = Math.max(1, Math.min(2000, Number(payload?.limit) || 100));
-
-    let items = state.store.scheduled;
-    if (accountId) {
-      items = items.filter((item) => item.accountId === accountId);
-    }
-
-    items = items
-      .filter((item) => ['pending', 'processing', 'failed'].includes(item.status))
-      .sort((a, b) => new Date(a.sendAt).getTime() - new Date(b.sendAt).getTime())
-      .slice(0, limit);
-
-    return { ok: true, items };
-  });
-
-  handle('claim-due-scheduled', async (_event, payload) => {
-    const items = await claimDueScheduled(Number(payload?.limit) || 5);
-    return { ok: true, items };
-  });
-
-  handle('complete-scheduled', async (_event, payload) => {
-    return markScheduledResult(payload || {});
-  });
-
-  handle('cancel-scheduled', async (_event, id) => {
-    return cancelScheduled(String(id || ''));
-  });
-
-  /* Статус задания на момент вызова. Исполнитель в renderer сверяется с ним
-     непосредственно перед необратимым действием (Enter / клик «Отправить»):
-     claim выдаёт КОПИЮ задания, поэтому отмена, пришедшая после claim, иначе
-     остаётся невидимой и «отменённое» сообщение всё равно уходит. */
-  handle('scheduled-status', async (_event, id) => {
-    const item = state.store.scheduled.find((row) => row.id === String(id || ''));
-    if (!item) return { ok: false, error: 'not_found' };
-    return { ok: true, status: item.status };
-  });
-
-  /* Make a pending/failed item due right now so the renderer's runner sends it
-     on the next (immediately-kicked) tick. */
-  handle('send-scheduled-now', async (_event, id) => {
-    const item = state.store.scheduled.find((row) => row.id === String(id || ''));
-    if (!item) return { ok: false, error: 'not_found' };
-    if (!['pending', 'failed'].includes(item.status)) return { ok: false, error: 'invalid_status' };
-    const nowIso = new Date().toISOString();
-    item.status = 'pending';
-    item.claimedAt = '';
-    item.errorText = '';
-    item.sendAt = nowIso; // due immediately
-    item.updatedAt = nowIso;
-    await saveStore();
-    return { ok: true };
-  });
-
-  /* Postpone a pending/failed item by N minutes from max(now, its time). */
-  handle('snooze-scheduled', async (_event, payload) => {
-    const id = String(payload?.id || '');
-    let minutes = Math.round(Number(payload?.minutes) || 0);
-    if (!Number.isFinite(minutes) || minutes < 1) return { ok: false, error: 'bad_minutes' };
-    minutes = Math.min(minutes, 1440);
-    const item = state.store.scheduled.find((row) => row.id === id);
-    if (!item) return { ok: false, error: 'not_found' };
-    if (!['pending', 'failed'].includes(item.status)) return { ok: false, error: 'invalid_status' };
-    const base = Math.max(Date.now(), new Date(item.sendAt).getTime() || 0);
-    const nowIso = new Date().toISOString();
-    item.status = 'pending';
-    item.claimedAt = '';
-    item.errorText = '';
-    item.sendAt = new Date(base + minutes * 60000).toISOString();
-    item.updatedAt = nowIso;
-    await saveStore();
-    return { ok: true, sendAt: item.sendAt };
-  });
-
   /* Per-contact default outgoing translation language (used by translator bar). */
   function contactLangKey(accountId, chatName) {
     return `${accountId}\u0000${chatName}`;
@@ -3815,105 +3299,6 @@ function registerIpc() {
       favorites: state.store.favorites.map((f) => ({ ...f })),
       important: (state.store.important || []).map((f) => ({ ...f })),
     };
-  });
-
-  /**
-   * Attach local files to a webview's <input type="file"> via Chrome DevTools Protocol.
-   * Used by the scheduled-send runner to deliver photo/video/document attachments —
-   * JS can't set `input.files` programmatically, but CDP's DOM.setFileInputFiles can.
-   */
-  // Per-webContents CDP queue (send-attachments-via-cdp) — tail promises
-  const _cdpQueues = new Map();
-
-  handle('send-attachments-via-cdp', async (_event, payload) => {
-    const id = Number(payload?.webContentsId);
-    const selector = String(payload?.selector || '').trim();
-    const files = Array.isArray(payload?.files) ? payload.files.map(String).filter(Boolean) : [];
-    if (!id || !selector || !files.length) return { ok: false, error: 'bad_args' };
-
-    // Verify every file actually exists on disk before attaching
-    for (const filePath of files) {
-      if (!(await isAttachmentPathAllowed(filePath))) {
-        return { ok: false, error: `path_not_allowed:${path.basename(filePath)}` };
-      }
-      try {
-        await fs.access(filePath);
-      } catch {
-        return { ok: false, error: `file_missing:${path.basename(filePath)}` };
-      }
-    }
-
-    const contents = webContents.fromId(id);
-    if (!contents || contents.isDestroyed()) {
-      return { ok: false, error: 'webcontents_not_found' };
-    }
-    // Only ever attach the CDP debugger to one of OUR account webviews — never
-    // the main window or any other webContents a compromised renderer might
-    // name. getType()!=='webview' already excludes the host window; the URL
-    // check ensures it's a live WhatsApp/Telegram page.
-    if (contents.getType() !== 'webview') {
-      return { ok: false, error: 'not_a_webview' };
-    }
-    const targetUrl = String(contents.getURL() || '');
-    if (!/^https:\/\/(web\.whatsapp\.com|web\.telegram\.org)\//.test(targetUrl)) {
-      return { ok: false, error: 'untrusted_target' };
-    }
-
-    // Serialize CDP work per webContents: with two overlapping calls the old
-    // isAttached() heuristic made the first call's finally-detach kill the
-    // second call's session mid-sendCommand.
-    const cdpWork = async () => {
-      const dbg = contents.debugger;
-      let weAttached = false;
-      let timeoutTimer = null;
-      try {
-        if (!dbg.isAttached()) {
-          dbg.attach('1.3');
-          weAttached = true;
-        }
-        // Guard the whole CDP sequence with a timeout: a wedged renderer can
-        // leave sendCommand pending forever, which would hang the renderer's
-        // await and keep the debugger attached indefinitely.
-        const CDP_TIMEOUT_MS = 15000;
-        const timeout = new Promise((_, reject) => {
-          timeoutTimer = setTimeout(() => reject(new Error('cdp_timeout')), CDP_TIMEOUT_MS);
-        });
-        const run = (async () => {
-          await dbg.sendCommand('DOM.enable');
-          const { root } = await dbg.sendCommand('DOM.getDocument', { depth: -1, pierce: true });
-          const { nodeId } = await dbg.sendCommand('DOM.querySelector', {
-            nodeId: root.nodeId,
-            selector,
-          });
-          if (!nodeId) return { ok: false, error: 'input_not_found' };
-          await dbg.sendCommand('DOM.setFileInputFiles', { nodeId, files });
-          return { ok: true };
-        })();
-        return await Promise.race([run, timeout]);
-      } catch (e) {
-        if (String(e?.message || e) === 'cdp_timeout') {
-          // Force-detach so the wedged target doesn't keep the debugger hostage
-          try { dbg.detach(); } catch { /* ignore */ }
-          weAttached = false; // already detached
-          return { ok: false, error: 'cdp_timeout' };
-        }
-        return { ok: false, error: String(e?.message || e) };
-      } finally {
-        if (timeoutTimer) clearTimeout(timeoutTimer);
-        if (weAttached) {
-          try { dbg.detach(); } catch { /* ignore */ }
-        }
-      }
-    };
-
-    const prevTail = _cdpQueues.get(id) || Promise.resolve();
-    const result = prevTail.catch(() => {}).then(cdpWork);
-    const tail = result.catch(() => {});
-    _cdpQueues.set(id, tail);
-    tail.finally(() => {
-      if (_cdpQueues.get(id) === tail) _cdpQueues.delete(id);
-    });
-    return result;
   });
 
   handle('open-data-dir', async () => {
@@ -4349,9 +3734,21 @@ async function cleanupOrphanPartitions() {
   let removed = 0;
   let totalBytes = 0;
   for (const entry of entries) {
+    // Партиция удалённого встроенного браузера — сессий мессенджеров в ней нет
+    if (entry === 'split_browser') {
+      await rmWithRetry(path.join(partitionsDir, entry)).catch(() => {});
+      continue;
+    }
     // Only consider names that match our scheme. Leave anything else alone.
     if (!/^(wa|tg|sig)_/.test(entry)) continue;
-    if (liveIds.has(entry)) continue;
+    if (liveIds.has(entry)) {
+      // Шейдерные кэши больше не пишутся (disable-gpu-shader-disk-cache) —
+      // убираем то, что осталось от прежних версий
+      for (const dir of ['GPUCache', 'DawnWebGPUCache', 'DawnGraphiteCache']) {
+        await rmWithRetry(path.join(partitionsDir, entry, dir)).catch(() => {});
+      }
+      continue;
+    }
     const full = path.join(partitionsDir, entry);
     try {
       const stat = await fs.stat(full).catch(() => null);
@@ -4475,8 +3872,6 @@ async function bootstrap() {
   cleanupStaleModels();
   await loadStore();
   _lastGoodAccountCount = Array.isArray(state.store?.accounts) ? state.store.accounts.length : 0;
-  pruneFinishedScheduled();
-  recoverStaleProcessingItems();
   ensureDefaultAccount();
   // Boot-time save must not kill bootstrap on a full disk — log and continue.
   await saveStore().catch((err) => console.error('[bootstrap] initial save failed:', err));
@@ -4537,8 +3932,6 @@ async function bootstrap() {
 // Keep-alive strategy lives at the top of this file (commandLine switches) and
 // in setupWebviewGuards (contents.setBackgroundThrottling(false)). We avoid
 // --disable-renderer-backgrounding because it pinned CPU with many accounts.
-// Scheduled sends still use targeted webview.reload() wake-up (schedule.js)
-// for cases where WA Web needs a fresh DOM pass before composing a message.
 
 /* Global error handlers — prevent silent crashes and data loss */
 process.on('uncaughtException', (err) => {

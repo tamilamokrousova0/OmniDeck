@@ -7,8 +7,8 @@
 **Один рабочий стол для десятков аккаунтов WhatsApp, Telegram и Signal.**
 
 Десктопное приложение для тех, кто ведёт переписку профессионально: поддержка,
-продажи, операторы. Все аккаунты в одном окне, с переводчиком, шаблонами,
-отложенной отправкой и заметками по контактам.
+продажи, операторы. Все аккаунты в одном окне, с переводчиком, шаблонами
+и заметками по контактам.
 
 [![Релиз](https://img.shields.io/github/v/release/tamilamokrousova0/OmniDeck?label=%D1%80%D0%B5%D0%BB%D0%B8%D0%B7&color=22c55e)](https://github.com/tamilamokrousova0/OmniDeck/releases/latest)
 [![Скачать](https://img.shields.io/github/downloads/tamilamokrousova0/OmniDeck/total?label=%D1%81%D0%BA%D0%B0%D1%87%D0%B8%D0%B2%D0%B0%D0%BD%D0%B8%D0%B9&color=3b82f6)](https://github.com/tamilamokrousova0/OmniDeck/releases)
@@ -21,7 +21,7 @@
 > **In short.** OmniDeck is a desktop deck for people who run dozens of
 > messenger accounts at once. It puts WhatsApp Web, Telegram Web and Signal
 > side by side in one window and adds the things an operator actually needs:
-> inline translation, message templates, scheduled sending, per-contact notes
+> inline translation, message templates, per-contact notes
 > and a single unread feed. macOS (Apple Silicon) and Windows. UI is Russian.
 
 ---
@@ -38,8 +38,6 @@
   контакту через `Cmd/Ctrl+K`, избранные и важные контакты отдельными списками.
 - **Переписка на чужом языке.** Перевод входящих и исходящих прямо в чате, с
   запоминанием языка контакта.
-- **Отложенная отправка.** С вложениями, повторами и разбросом времени, чтобы
-  серии сообщений не уходили в одну минуту.
 
 ## Что умеет по мессенджерам
 
@@ -54,16 +52,11 @@
 | Поиск контакта по всем аккаунтам | да | — | — |
 | Переводчик в чате | да | — | — |
 | Шаблоны и слэш-команды | да | — | — |
-| Отложенная отправка | да | — | — |
 | Заметки по контакту | да | — | — |
 | Голосовые: запись и расшифровка | да | — | — |
 
 WhatsApp и Telegram работают через их официальные веб-версии внутри приложения.
 Signal подключается напрямую через `signal-cli`, отдельный клиент не нужен.
-
-<div align="center">
-<img src="docs/media/scheduler.png" width="900" alt="Отложенная отправка: цель, текст, время, повторы и вложения">
-</div>
 
 ## Установка
 
@@ -95,9 +88,6 @@ Signal подключается напрямую через `signal-cli`, отд
 
 - Автоматизация WhatsApp и Telegram опирается на вёрстку их веб-версий. Когда
   они меняют интерфейс, часть функций может временно ломаться.
-- Отложенная отправка работает, пока приложение запущено. На macOS закрытие
-  окна не останавливает её, приложение остаётся в доке; выход через `Cmd+Q` —
-  останавливает.
 - Сборки macOS — только Apple Silicon. Intel-версии нет.
 - Интерфейс на русском языке.
 

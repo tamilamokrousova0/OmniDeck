@@ -87,15 +87,6 @@
               </svg>
               <span class="btn-toolbar-label">Шаблоны</span>
             </button>
-            <div class="schedule-widget">
-              <button type="button" id="open-schedule-toolbar" class="btn btn-icon btn-toolbar-icon btn-toolbar-expand btn-schedule" title="Отложенная отправка">
-                <svg class="icon icon-schedule" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9"/>
-                  <path d="M12 7v5l3.5 2"/>
-                </svg>
-                <span class="btn-toolbar-label">Отложенные</span>
-              </button>
-            </div>
             </div>
 
             <div class="toolbar-group">
@@ -107,13 +98,6 @@
                 <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
               </svg>
               <span class="btn-toolbar-label">Голосовое</span>
-            </button>
-            <button type="button" id="toggle-split" class="btn btn-icon btn-toolbar-icon btn-toolbar-expand" title="Браузер в боковой панели">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="3" y="4" width="18" height="16" rx="2"/>
-                <line x1="14" y1="4" x2="14" y2="20"/>
-              </svg>
-              <span class="btn-toolbar-label">Браузер</span>
             </button>
             </div>
           </div>
@@ -192,45 +176,6 @@
             </div>
           </div>
         </section>
-        <aside id="split-pane" class="split-pane" aria-label="Встроенный браузер">
-          <div id="split-divider" class="split-divider" title="Потянуть для изменения ширины"></div>
-          <div class="split-bar">
-            <button type="button" id="split-back" class="btn btn-icon split-btn" title="Назад" aria-label="Назад">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-            </button>
-            <button type="button" id="split-forward" class="btn btn-icon split-btn" title="Вперёд" aria-label="Вперёд">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
-            </button>
-            <button type="button" id="split-home" class="btn btn-icon split-btn" title="Пустая страница" aria-label="Пустая страница">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
-            </button>
-            <button type="button" id="split-reload" class="btn btn-icon split-btn" title="Обновить" aria-label="Обновить">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>
-            </button>
-            <input type="text" id="split-url" class="split-url" placeholder="Адрес или поиск..." spellcheck="false" autocomplete="off" />
-            <button type="button" id="split-translate" class="btn btn-icon split-btn" title="Перевести страницу на русский" aria-label="Перевести страницу на русский">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>
-            </button>
-            <button type="button" id="split-open-ext" class="btn btn-icon split-btn" title="Открыть во внешнем браузере" aria-label="Открыть во внешнем браузере">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
-            </button>
-            <button type="button" id="split-close" class="btn btn-icon split-btn" title="Закрыть панель" aria-label="Закрыть панель">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
-          </div>
-          <div id="split-view-host" class="split-view-host">
-            <div id="split-start" class="split-start">
-              <div class="split-start-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 4 9 15 15 0 0 1-4 9 15 15 0 0 1-4-9 15 15 0 0 1 4-9z"/></svg>
-              </div>
-              <div class="split-start-sub">Куда пойдём?</div>
-              <div class="split-start-field">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-                <input type="text" id="split-start-input" placeholder="Поиск или адрес сайта" spellcheck="false" autocomplete="off" />
-              </div>
-            </div>
-          </div>
-        </aside>
       </main>
 
       <aside id="panel" class="panel hidden">
@@ -277,21 +222,6 @@
               <span class="settings-menu-text">
                 <span class="settings-menu-title">Общие шаблоны</span>
                 <span class="settings-menu-sub" data-sub="templates">загрузка…</span>
-              </span>
-              <span class="settings-menu-arrow" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-              </span>
-            </button>
-            <button type="button" class="settings-menu-item" data-open="schedule">
-              <span class="settings-menu-ico">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="9"/>
-                  <path d="M12 7v5l3.5 2"/>
-                </svg>
-              </span>
-              <span class="settings-menu-text">
-                <span class="settings-menu-title">Отложенные сообщения</span>
-                <span class="settings-menu-sub" data-sub="schedule">очередь · расписание</span>
               </span>
               <span class="settings-menu-arrow" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
@@ -445,22 +375,6 @@
         </details>
         </section>
 
-        <section class="settings-section" data-settings-section="schedule">
-        <details class="card card-collapsible" id="schedule-settings-card" open>
-          <summary>Создать отложенное сообщение</summary>
-          <div id="schedule-edit-banner" class="schedule-edit-banner hidden"><span class="schedule-edit-banner-text">Редактирование задания</span><button type="button" id="schedule-edit-cancel" class="schedule-edit-banner-close" title="Отменить" aria-label="Отменить">×</button></div>
-          <label>Цель отправки<input id="schedule-target" type="text" placeholder="Выберите WhatsApp и чат" readonly /></label>
-          <button type="button" id="open-chat-picker" class="btn">Выбрать WhatsApp и чат</button>
-          <label>Сообщение<textarea id="schedule-text" rows="4" placeholder="Текст сообщения"></textarea></label>
-          <label>Время отправки<input id="schedule-at" type="datetime-local" step="1" /></label>
-          <div id="schedule-quick-row" class="schedule-quick-row"><button type="button" class="btn btn-quick-min" data-quick-min="5">+5 мин</button><button type="button" class="btn btn-quick-min" data-quick-min="10">+10 мин</button><button type="button" class="btn btn-quick-min" data-quick-min="15">+15 мин</button><button type="button" class="btn btn-quick-min" data-quick-min="20">+20 мин</button></div>
-          <div class="row"><label class="schedule-repeat-label">Повтор<select id="schedule-repeat" class="settings-select"><option value="">Без повтора</option><option value="daily">Каждый день</option><option value="weekdays">По будням</option><option value="weekly">Раз в неделю</option></select></label><label class="schedule-repeat-label">Джиттер<select id="schedule-jitter" class="settings-select"><option value="0">Точно в срок</option><option value="5">±5 мин</option><option value="15">±15 мин</option><option value="30">±30 мин</option></select></label></div>
-          <div class="row"><button type="button" id="pick-attachments" class="btn">Добавить вложения</button><button type="button" id="clear-attachments" class="btn">Очистить вложения</button></div>
-          <div id="attachments-list" class="attachments-list"></div><button type="button" id="create-schedule" class="btn btn-primary full">Запланировать</button>
-        </details>
-        <details class="card card-collapsible" id="scheduled-list-card" open><summary>Запланированные сообщения</summary><div id="scheduled-list" class="scheduled-list"></div></details>
-        </section>
-
         <section class="settings-section" data-settings-section="clocks">
         <details class="card card-collapsible" id="clocks-settings-card" open>
           <summary>Мировые часы</summary>
@@ -503,29 +417,6 @@
 
       </aside>
 
-    </div>
-
-    <div id="chat-picker-modal" class="modal hidden">
-      <div class="modal-card">
-        <div class="modal-head">
-          <h3>Выбор чата</h3>
-          <button type="button" id="close-chat-picker" class="btn btn-icon modal-close-btn modal-close-x" title="Закрыть" aria-label="Закрыть">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-        <div class="picker-account-display" id="picker-account-display">Активный аккаунт не выбран</div>
-        <!-- Hidden select retained for backward-compat with existing handlers;
-             value is always synced to state.activeAccountId by the picker code. -->
-        <select id="picker-account" hidden></select>
-        <label>
-          Чат
-          <select id="picker-chat"></select>
-        </label>
-        <div class="row">
-          <button type="button" id="picker-refresh" class="btn">Обновить чаты</button>
-          <button type="button" id="picker-apply" class="btn btn-primary">Выбрать</button>
-        </div>
-      </div>
     </div>
 
     <div id="account-menu-modal" class="modal hidden">

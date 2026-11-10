@@ -15,7 +15,6 @@ import { setHubVisibility, updateHubDashboard } from './hub.js';
 import { isTranslatorEnabled, isCrmHoverEnabled, refreshTweaksFabVisibility, saveSettings } from './settings.js';
 import { handleCrmHover, hideCrmHoverPopover } from './crm-hover.js';
 import { WaDeckUnreadModule } from '../unread.js';
-import { WaDeckScheduleModule } from '../schedule.js';
 import { keepAliveScript } from '../webview-scripts/keep-alive.js';
 import { tgBadgeInterceptScript } from '../webview-scripts/tg-unread.js';
 import { bridgeScript } from '../webview-scripts/bridge.js';
@@ -796,12 +795,18 @@ function pushActiveFlag(webview, isActive, force = false) {
   const flag = isActive ? '1' : '0';
   if (!force && webview.dataset.wadeckActiveFlag === flag) return;
   webview.dataset.wadeckActiveFlag = flag;
+  /* Не доставленный флаг нельзя считать отправленным: иначе гость навсегда
+     оставался «фоновым» (кнопки расшифровки не рисовались) — следующий
+     вызов видел совпавший dataset и выходил. */
+  const forget = () => {
+    if (webview.dataset.wadeckActiveFlag === flag) delete webview.dataset.wadeckActiveFlag;
+  };
   try {
     webview.executeJavaScript(
       `(()=>{try{window.__waDeckWebviewActive=${Boolean(isActive)};}catch(e){}return 1;})()`,
       true,
-    ).catch(() => {});
-  } catch { /* not attached — flag re-pushed next switch */ }
+    ).catch(forget);
+  } catch { forget(); /* not attached — flag re-pushed next switch */ }
 }
 
 /* Активность для гостевых скриптов — это «аккаунт, выбранный пользователем»,
@@ -985,30 +990,6 @@ async function insertTextIntoActiveChat(text) {
   }
 }
 
-/* Prefill the schedule target with the chat currently open in the active
-   WhatsApp webview — lets the user schedule a message in ~2 clicks without
-   walking through the picker. No open chat → previous behaviour (empty). */
-async function prefillScheduleTargetFromActiveChat() {
-  if (state._editingScheduleId) return; // never clobber an in-progress edit
-  const account = activeAccount();
-  if (!account || account.frozen || account.type !== 'whatsapp') return;
-  const webview = selectedWebview();
-  if (!isWebviewReady(webview) || typeof activeChatContactScript !== 'function') return;
-  let chatName = '';
-  try {
-    chatName = String(await webview.executeJavaScript(activeChatContactScript(), true) || '').trim();
-  } catch {
-    return;
-  }
-  if (!chatName) return;
-  state.scheduleTarget = {
-    accountId: account.id,
-    accountName: account.name,
-    chatName,
-  };
-  WaDeckScheduleModule.renderScheduleTarget();
-}
-
 async function sendAudioAsVoiceMessage() {
   const account = activeAccount();
   if (!account) {
@@ -1139,6 +1120,5 @@ export {
   sendWebviewInput,
   resetWebviewUiState,
   insertTextIntoActiveChat,
-  prefillScheduleTargetFromActiveChat,
   sendAudioAsVoiceMessage,
 };

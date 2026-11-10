@@ -1322,65 +1322,6 @@ html[data-theme='light'] textarea[readonly] {
   line-height: 1.35;
 }
 
-.attachments-list,
-.scheduled-list {
-  max-height: 220px;
-  overflow: auto;
-  display: grid;
-}
-
-.attachment-item,
-.scheduled-item {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--panel);
-  padding: 8px;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.scheduled-meta,
-.attachment-meta {
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.scheduled-countdown {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-/* Quick-time buttons under the "Время отправки" field (now + N minutes). */
-.schedule-quick-row {
-  flex-wrap: wrap;
-  margin: 6px 0 2px;
-}
-
-.btn-quick-min {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  min-width: 0;
-  min-height: 24px;
-  height: 24px;
-  font-weight: 600;
-  line-height: 1;
-}
-
-/* Повтор / Джиттер — компактные, ровно две колонки рядом (метка над селектом). */
-.schedule-repeat-label {
-  flex: 1;
-  min-width: 0;
-  gap: 3px;
-  font-size: 11px;
-}
-.schedule-repeat-label .settings-select {
-  width: 100%;
-  max-width: none;
-  min-height: 26px;
-  padding: 4px 8px;
-}
 
 /* Кнопки «Добавить/Очистить вложения» — меньше и в один ряд, а не столбиком. */
 #pick-attachments,
@@ -1394,12 +1335,6 @@ html[data-theme='light'] textarea[readonly] {
   white-space: nowrap;
 }
 
-.scheduled-item-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-}
 
 .badge {
   border-radius: 999px;
@@ -1493,25 +1428,6 @@ html[data-theme='light'] textarea[readonly] {
   place-items: center;
 }
 
-.picker-account-display {
-  font-size: 12px;
-  color: var(--text-2);
-  padding: 8px 12px;
-  border: 1px solid var(--stroke-soft);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-  margin: 4px 0 2px;
-}
-.picker-account-display.is-empty {
-  color: var(--signal-warn);
-  background: color-mix(in srgb, var(--signal-warn) 8%, transparent);
-  border-color: color-mix(in srgb, var(--signal-warn) 30%, transparent);
-}
-html[data-theme='light'] .picker-account-display.is-empty {
-  color: #a35f00;
-  background: #fff5e5;
-  border-color: #f5c98f;
-}
 
 .modal-card h3 {
   margin: 0 0 4px;
@@ -1750,11 +1666,7 @@ html[data-theme='light'] .btn-ghost {
 
 /* (Old light-theme .add-account-btn override removed — new dashed style above) */
 
-html[data-theme='light'] .attachment-item,
-html[data-theme='light'] .scheduled-item {
-  border-color: #c8d8ec;
-  background: #f8fbff;
-}
+
 html[data-theme='light'] .badge.pending {
   border-color: #2db36e;
   color: #1a7a4c;
@@ -1768,10 +1680,6 @@ html[data-theme='light'] .badge.failed {
   color: #b02020;
 }
 
-html[data-theme='light'] .scheduled-meta,
-html[data-theme='light'] .attachment-meta {
-  color: #627ea0;
-}
 
 html[data-theme='light'] .badge {
   border-color: #b3c9e4;
@@ -2944,15 +2852,6 @@ html[data-theme='light'] .clocks-add-form input {
   border-color: rgba(61, 214, 140, 0.2);
 }
 
-/* ── Scheduled/Attachment Items Hover — flat, no lift (Law 1) ── */
-.scheduled-item,
-.attachment-item {
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-.scheduled-item:hover,
-.attachment-item:hover {
-  border-color: #3a4555;
-}
 
 /* ── Modal Entrance Animation (uses keyframes from .modal/.modal-card above) ── */
 
@@ -3002,30 +2901,6 @@ html[data-theme='light'] .clocks-add-form input {
   100% { transform: scale(1); }
 }
 
-.btn-schedule:hover .icon-schedule {
-  animation: schedulePulse 0.5s ease;
-}
-@keyframes schedulePulse {
-  0%   { transform: rotate(0deg) scale(1); }
-  30%  { transform: rotate(12deg) scale(1.1); }
-  60%  { transform: rotate(-6deg) scale(1.05); }
-  100% { transform: rotate(0deg) scale(1); }
-}
-.btn-schedule.has-pending {
-  color: var(--green);
-}
-.btn-schedule.has-pending .icon-schedule {
-  animation: scheduleActive 2s ease-in-out infinite;
-}
-@keyframes scheduleActive {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.5; }
-}
-
-/* ── Schedule widget (toolbar anchor for the schedule button) ── */
-.schedule-widget {
-  position: relative;
-}
 
 /* ── Voice Message Button ── */
 .btn-voice:hover .icon-voice {
@@ -5399,46 +5274,6 @@ html[data-theme='light'] .add-account-popover {
   box-shadow: 0 12px 32px -12px rgba(42, 76, 140, 0.28);
 }
 
-/* ── Schedule edit-mode banner (thin, compact — one row above the form) ── */
-.schedule-edit-banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 28px;
-  padding: 0 8px;
-  margin-bottom: 8px;
-  border-radius: var(--radius-md);
-  border: 1px solid color-mix(in oklab, var(--signal-warn) 45%, transparent);
-  background: color-mix(in oklab, var(--signal-warn) 12%, transparent);
-}
-.schedule-edit-banner.hidden { display: none; }
-.schedule-edit-banner-text {
-  flex: 1 1 auto;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--signal-warn);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.schedule-edit-banner-close {
-  flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--signal-warn);
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.schedule-edit-banner-close:hover {
-  background: color-mix(in oklab, var(--signal-warn) 18%, transparent);
-}
-html[data-theme='light'] .schedule-edit-banner {
-  background: color-mix(in oklab, var(--signal-warn) 10%, #ffffff);
-}
 
 /* ── Unified SVG close-cross helper ── */
 .modal-close-x {
@@ -5451,19 +5286,17 @@ html[data-theme='light'] .schedule-edit-banner {
   width: 14px;
   height: 14px;
 }
-.schedule-edit-banner-close svg { width: 12px; height: 12px; }
+
 
 /* ── Invisible hit-area expansion for sub-28px controls (visual size unchanged).
    .tmpl-lib-edit/.tmpl-lib-del are already position:absolute — that alone makes
    them a containing block for ::after, so only static buttons get `relative`. ── */
-.update-toast-close,
-.schedule-edit-banner-close {
+.update-toast-close {
   position: relative;
 }
 .tmpl-lib-edit::after,
 .tmpl-lib-del::after,
-.update-toast-close::after,
-.schedule-edit-banner-close::after {
+.update-toast-close::after {
   content: '';
   position: absolute;
   inset: -6px;
@@ -5488,7 +5321,6 @@ html[data-theme='light'] .schedule-edit-banner {
 .hub-clock-time,
 .toolbar-clock-time,
 .weather-temp,
-.scheduled-countdown,
 .zoom-value,
 .hub-section-count,
 .tmpl-lib-count,
@@ -6063,12 +5895,6 @@ html[data-theme='light'] { color-scheme: light; }
   padding-right: 26px;
 }
 
-/* P0: быстрые кнопки времени — жёсткая сетка 4-в-ряд ("+20 мин" сиротела) */
-.schedule-quick-row {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-.btn-quick-min { padding: 2px 4px; white-space: nowrap; font-size: 10.5px; }
 
 /* P0: вкладки хаба — сегмент-контрол, визуально отличимый от мелких
    фильтров аккаунтов (две chip-строки читались как одно и то же) */
@@ -6181,9 +6007,7 @@ html[data-theme='light'] { color-scheme: light; }
   border-radius: var(--radius-lg);
 }
 .panel .btn-icon { min-width: 26px; padding: 4px 0; }
-.schedule-quick-row { gap: 5px; }
-.attachments-list,
-.scheduled-list { gap: 4px; }
+
 
 /* Детальные вью: карточка-поверхность — главный источник «объёмности»
    (было padding 16 / gap 12) */
@@ -6211,71 +6035,6 @@ html[data-theme='light'] { color-scheme: light; }
 .modal-card-crm .crm-modal-actions .btn.btn-primary,
 .modal-card-crm .crm-modal-actions .btn:not(.btn-primary) { height: 28px; padding: 0 12px; }
 .modal-card-crm .crm-meta { padding: 6px 14px 10px; }
-
-/* ══ Split view: встроенный браузер справа от чатов ══ */
-.workspace { --split-w: 44%; }
-.workspace.split-on {
-  grid-template-columns: minmax(320px, 1fr) minmax(280px, var(--split-w));
-}
-.workspace.split-on .toolbar,
-.workspace.split-on .pin-feed { grid-column: 1 / -1; }
-.workspace.split-on .webviews { grid-column: 1; }
-
-.split-pane {
-  display: none;
-  grid-row: 3;
-  grid-column: 2;
-  position: relative;
-  min-width: 0;
-  min-height: 0;
-  flex-direction: column;
-  border-left: 1px solid var(--stroke);
-  background: var(--bg-1);
-}
-.workspace.split-on .split-pane { display: flex; }
-
-.split-divider {
-  position: absolute;
-  left: -4px;
-  top: 0;
-  bottom: 0;
-  width: 8px;
-  cursor: col-resize;
-  z-index: 6;
-}
-.split-divider:hover { background: var(--accent-soft); }
-
-.split-bar {
-  display: flex;
-  align-items: center;
-  border-bottom: 1px solid var(--stroke-soft);
-  flex: 0 0 auto;
-}
-.split-btn { flex: 0 0 auto; }
-.split-url {
-  flex: 1 1 auto;
-  min-width: 0;
-  color: var(--text-strong);
-  outline: none;
-}
-
-.split-view-host { position: relative; flex: 1 1 auto; min-height: 0; }
-.split-view-host webview {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-.split-view-empty {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: var(--text-4);
-  font-size: 12px;
-  text-align: center;
-  padding: 20px;
-}
 
 /* ══ Signal-панель (у signal-аккаунтов нет webview) ══ */
 .signal-panel {
@@ -7072,7 +6831,6 @@ html[data-theme='light'] .signal-msg-out {
 html[data-theme='light'] .huf-row:hover {
   background: #eef4ff;
 }
-/* Кнопки split-бара: базовый .btn-icon min-width 30px раздувал их до 30×30 */
 /* «Добавить Signal» вёл себя иначе, чем Telegram/WhatsApp */
 .hub-action-sig:hover {
   border-color: rgba(58, 118, 240, 0.4);
@@ -7085,94 +6843,3 @@ html[data-theme='light'] .huf-row:hover {
   color: var(--rose);
 }
 .signal-msg-out .signal-msg-transcript-err { color: #ffd9d9; }
-
-/* Кнопка перевода страницы в сплит-браузере: активна = страница переведена */
-.split-btn.is-active {
-  background: color-mix(in oklab, #3A76F0 20%, transparent);
-  color: #3A76F0;
-}
-
-/* ══ Браузер: бар в стиле Franz — ровные иконки, адрес-пилюля ══ */
-.split-bar {
-  gap: 2px;
-  padding: 7px 10px;
-}
-.split-btn {
-  display: grid;              /* иконки были смещены: инлайновый svg ловил baseline */
-  place-items: center;
-  width: 26px;
-  min-width: 26px;
-  height: 26px;
-  min-height: 26px;
-  padding: 0;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-3);
-  line-height: 0;
-}
-.split-btn svg { width: 15px; height: 15px; display: block; }
-.split-btn:hover { background: var(--bg-2); color: var(--text-strong); }
-.split-btn:disabled { opacity: 0.4; }
-.split-url {
-  height: 28px;
-  margin: 0 6px;
-  padding: 0 12px;
-  border-radius: 8px;
-  background: var(--bg-2);
-  border: 1px solid transparent;
-  font-size: 12px;
-}
-.split-url:focus { border-color: #3A76F0; background: var(--bg-1); }
-
-/* Стартовый экран: иконка, подпись, крупное поле поиска (без приветствия) */
-.split-start {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  padding: 24px;
-  background: var(--bg);
-}
-.split-start.hidden { display: none; }
-.split-start-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 18px;
-  display: grid;
-  place-items: center;
-  background: color-mix(in oklab, var(--accent-blue) 16%, transparent);
-  color: var(--accent-blue);
-}
-.split-start-icon svg { width: 38px; height: 38px; }
-.split-start-sub {
-  font-size: 15px;
-  color: var(--text-2);
-}
-.split-start-field {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: min(420px, 90%);
-  height: 44px;
-  padding: 0 16px;
-  border-radius: 12px;
-  background: var(--bg-1);
-  border: 1px solid var(--stroke);
-  transition: border-color 0.15s ease;
-}
-.split-start-field:focus-within { border-color: #3A76F0; }
-.split-start-field svg { width: 17px; height: 17px; color: var(--text-4); flex: 0 0 auto; }
-.split-start-field input {
-  flex: 1 1 auto;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  outline: none;
-  font-size: 14px;
-  color: var(--text-strong);
-}
-.split-start-field input:focus { box-shadow: none; }

@@ -21,7 +21,6 @@ import {
 } from './account-menu.js';
 import { WaDeckUnreadModule } from '../unread.js';
 import { brandIconSvg } from './brand-icons.js';
-import { WaDeckScheduleModule } from '../schedule.js';
 
 function activeAccount() {
   return state.accounts.find((acc) => acc.id === state.activeAccountId) || null;
@@ -553,23 +552,10 @@ function _setActiveAccountInner(accountId) {
     } else {
       setStatus(`Аккаунт: ${account.name}`);
     }
-    if (!state.scheduleTarget.accountId) {
-      state.scheduleTarget.accountId = account.id;
-      state.scheduleTarget.accountName = account.name;
-      WaDeckScheduleModule.renderScheduleTarget();
-    }
   } else {
     setStatus('Нет активного аккаунта');
   }
   WaDeckUnreadModule.scheduleDockBadgeSync();
-  // Scheduled list is global (not per-account), so it does not need to be
-  // re-rendered on every switch. The first activation seeds the toolbar
-  // indicator; subsequent updates flow from create/cancel/edit handlers in
-  // schedule.js which call renderScheduled() directly when data changes.
-  if (!state._scheduledInitialized) {
-    state._scheduledInitialized = true;
-    WaDeckScheduleModule.renderScheduled().catch(console.error);
-  }
   // Автофокус композера: после Cmd+N печатать можно сразу, без клика мышью.
   // Тихий no-op, если чат не открыт или webview ещё не готов (гибернация).
   const activeWv = state.webviews.get(state.activeAccountId);
@@ -621,9 +607,6 @@ async function removeAccount(accountId) {
 
   cleanupWebview(state.webviews.get(accountId));
   state.webviews.delete(accountId);
-  if (state.chatPickerCache && state.chatPickerCache.accountId === accountId) {
-    state.chatPickerCache = null;
-  }
   state.unreadByAccount.delete(accountId);
   state._hibernated?.delete(accountId); // иначе залипший is-hibernated + утечка
   state.zoomByAccount?.delete(accountId);
@@ -636,17 +619,12 @@ async function removeAccount(accountId) {
   // Кэш глобального поиска живёт в localStorage и переживает удаление:
   // чистим здесь, когда аккаунта уже нет в списке.
   if (window.WaDeckGlobalSearch?.onAccountRemoved) window.WaDeckGlobalSearch.onAccountRemoved();
-  if (state.scheduleTarget.accountId === accountId) {
-    state.scheduleTarget = { accountId: '', accountName: '', chatName: '' };
-    WaDeckScheduleModule.renderScheduleTarget();
-  }
 
   // After deletion, always return to the Hub screen instead of jumping to a
   // neighbouring account — that jump was disorienting (users land on an
   // unrelated workspace). Empty activeAccountId triggers the hub in
   // refreshWebviewVisibility() via the !state.activeAccountId branch.
   setActiveAccount('');
-  await WaDeckScheduleModule.renderScheduled();
   // Always re-render the sidebar and hub after a removal so the deleted
   // account's badge disappears immediately, regardless of whether a next
   // active account was assigned. Previously this happened only in the
