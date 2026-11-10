@@ -999,3 +999,159 @@ html .modal-card-crm .crm-section {
 html .modal-card-crm .crm-badge {
   border: 0;
 }
+
+/* ════════ Второй проход: то, что оставалось в старом виде ════════ */
+
+/* Поля и селекты — без рамок везде, рамка только в фокусе */
+html body input[type='text'],
+html body input[type='search'],
+html body input[type='number'],
+html body input:not([type]),
+html body textarea,
+html body select,
+html body .settings-select,
+html body .clock-label-input {
+  border-color: transparent !important;
+  background-color: var(--bg-2);
+  border-radius: var(--radius-md);
+  color: var(--text-strong);
+}
+html body input[type='text']:focus,
+html body input[type='search']:focus,
+html body input[type='number']:focus,
+html body input:not([type]):focus,
+html body textarea:focus,
+html body select:focus,
+html body .settings-select:focus {
+  border-color: var(--lime) !important;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: none;
+}
+html body .gs-box input,
+html body .gs-box input:focus {
+  background-color: transparent;
+  border-color: transparent !important;
+  box-shadow: none;
+}
+
+/* Кнопки-иконки верхней панели — круглые, как в остальной оболочке */
+html .btn.btn-toolbar-icon,
+html[data-theme='light'] .btn.btn-toolbar-icon {
+  background: var(--bg-1);
+  box-shadow: var(--shadow-card);
+  color: var(--text-strong);
+}
+html .btn.btn-toolbar-icon:hover,
+html[data-theme='light'] .btn.btn-toolbar-icon:hover {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+html .btn.btn-toolbar-icon:disabled {
+  box-shadow: none;
+  background: transparent;
+}
+html .toolbar-left,
+html .toolbar-group {
+  gap: 6px;
+}
+
+/* Полотно без точечной сетки и декоративных градиентов */
+html .hub-screen,
+html .webviews.hub-mode .hub-screen,
+html[data-theme='light'] .hub-screen {
+  background: var(--bg-0);
+  background-image: none;
+}
+html .confirm-icon-circle,
+html .release-notes-icon-circle {
+  background: var(--ink);
+  background-image: none;
+  color: var(--on-ink);
+  box-shadow: none;
+}
+html .modal-card-confirm .confirm-icon-circle {
+  background: var(--rose-soft);
+  color: var(--rose);
+}
+html .btn.btn-ghost.account-menu-reset-btn {
+  border-color: transparent;
+  background: var(--bg-2);
+  color: var(--text-strong);
+}
+html .tmpl-lib-action,
+html #template-new {
+  border-radius: var(--pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 4px 10px;
+}
+html .tmpl-lib-action:hover {
+  background: var(--lime);
+  color: var(--on-lime);
+}
+
+/* Лента избранных и важных */
+html .pin-feed-track > *,
+html .pin-feed-more,
+html[data-theme='light'] .pin-feed-track > * {
+  border-radius: var(--pill);
+  border: 0;
+  background: var(--bg-1);
+  box-shadow: var(--shadow-card);
+}
+html .pin-feed-head,
+html .pin-feed-legend {
+  color: var(--text-3);
+}
+
+/* Полосы прокрутки */
+html ::-webkit-scrollbar-thumb {
+  background: var(--bg-3);
+  border-radius: var(--pill);
+}
+html ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Строки часов: без рамок, поля сами задают форму */
+html .clocks-settings-row,
+html[data-theme='light'] .clocks-settings-row {
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  overflow: visible;
+}
+html .clocks-settings-row .btn-remove-clock,
+html .clocks-add-form .btn {
+  border-radius: 50%;
+  background: var(--bg-2);
+  color: var(--text-2);
+}
+html .clocks-settings-row .btn-remove-clock:hover {
+  background: var(--rose-soft);
+  color: var(--rose);
+}
+html .clocks-add-form .btn.btn-primary,
+html .clocks-add-form .btn-small {
+  background: var(--lime);
+  color: var(--on-lime);
+}
+
+/* В тёмной теме обычная кнопка на карточке сливалась с ней */
+html:not([data-theme='light']) .card .btn:not(.btn-primary):not(.btn-ghost):not(.btn-add-clock):not(.btn-delete-account):not(.btn-ghost-danger),
+html:not([data-theme='light']) .modal-card .btn:not(.btn-primary):not(.btn-ghost):not(.btn-danger):not(.btn-delete-account):not(.btn-action-icon),
+html:not([data-theme='light']) .modal-card .toggle-btn:not(.is-active) {
+  background: var(--bg-3);
+}
+html:not([data-theme='light']) .modal-card .btn-close-round,
+html:not([data-theme='light']) .modal-card .btn.btn-action-icon {
+  background: var(--bg-3);
+}
+html .hint,
+html[data-theme='light'] .hint {
+  color: var(--text-3);
+}
+html body select,
+html body option {
+  color: var(--text-strong);
+}
