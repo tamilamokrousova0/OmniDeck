@@ -11,7 +11,7 @@ permissions:
 jobs:
   build-mac:
     if: ${{ github.ref_name != 'v0.2.4' }}
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: Checkout
